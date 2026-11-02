@@ -4,7 +4,7 @@ import logging
 from time import perf_counter, sleep
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
@@ -20,6 +20,54 @@ from app.db.models import DemoActor
 router = APIRouter(prefix="/runs", tags=["runs"])
 logger = logging.getLogger(__name__)
 RUN_LEASE_SECONDS = 60
+
+
+@router.get("")
+def list_runs(
+    status: str | None = Query(default=None, max_length=32),
+    decision: str | None = Query(default=None, max_length=32),
+    policy_version: str | None = Query(default=None, max_length=80),
+    created_from: datetime | None = None,
+    created_to: datetime | None = None,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    actor: DemoActor = Depends(get_current_actor),
+    db: Session = Depends(get_db),
+):
+    if created_from and created_to and created_from > created_to:
+        raise HTTPException(status_code=422, detail={"code": "INVALID_TIME_RANGE", "message": "created_from must be earlier than created_to."})
+    query = select(RunRecord).where(RunRecord.tenant_id == actor.tenant_id)
+    if actor.role not in {"admin", "manager"}:
+        query = query.where(RunRecord.actor_id == actor.id)
+    rows = db.scalars(query.order_by(RunRecord.created_at.desc())).all()
+    filtered = []
+    for row in rows:
+        result = row.result or {}
+        run_decision = (result.get("decision") or {}).get("decision")
+        evidence = result.get("policy_evidence") or []
+        version = evidence[0].get("version") if evidence else (result.get("decision") or {}).get("policy_version")
+        created_at = row.created_at.replace(tzinfo=timezone.utc) if row.created_at.tzinfo is None else row.created_at
+        if status and row.status != status:
+            continue
+        if decision and run_decision != decision:
+            continue
+        if policy_version and version != policy_version:
+            continue
+        if created_from and created_at < created_from:
+            continue
+        if created_to and created_at > created_to:
+            continue
+        quote = result.get("quote") or {}
+        breakdown = quote.get("breakdown") or {}
+        filtered.append({
+            "run_id": row.id, "actor_id": row.actor_id, "status": row.status,
+            "execution_mode": row.execution_mode, "decision": run_decision,
+            "reason_code": (result.get("decision") or {}).get("reason_code"),
+            "policy_id": evidence[0].get("policy_id") if evidence else (result.get("decision") or {}).get("policy_id"),
+            "policy_version": version, "quote_id": quote.get("id"), "quote_total": breakdown.get("total"),
+            "created_at": created_at, "duration_ms": row.duration_ms,
+        })
+    return {"total": len(filtered), "items": filtered[offset:offset + limit], "limit": limit, "offset": offset}
 
 
 def _replay_or_claim_run(db: Session, actor_id: str, key: str, request_hash: str) -> tuple[RunResponse | None, RunRecord | None]:

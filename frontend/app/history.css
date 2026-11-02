@@ -1,0 +1,24 @@
+.dg-history { min-height: 100vh; background: #f4f6f8; color: #17323e; }
+.dg-history-main { width: min(1180px, calc(100% - 36px)); margin: 30px auto 60px; }
+.dg-history-head { display: flex; align-items: end; justify-content: space-between; gap: 20px; margin-bottom: 20px; }
+.dg-history-head h1 { margin: 0; font-size: 28px; letter-spacing: -.035em; }
+.dg-history-head p { margin: 7px 0 0; color: #718792; font-size: 13px; }
+.dg-history-nav { display: flex; gap: 8px; }
+.dg-history-nav a, .dg-history-link { color: #3659d9; text-decoration: none; font-size: 12px; font-weight: 700; }
+.dg-history-panel { border: 1px solid #dce5e8; border-radius: 10px; background: white; padding: 18px; box-shadow: 0 4px 18px rgb(26 51 66 / 4%); }
+.dg-history-filters { display: flex; flex-wrap: wrap; gap: 9px; align-items: end; margin-bottom: 14px; }
+.dg-history-filters label { display: grid; gap: 5px; color: #687f89; font-size: 10px; font-weight: 700; }
+.dg-history-filters input, .dg-history-filters select, .dg-history-actor { min-height: 36px; border: 1px solid #cfdbdf; border-radius: 6px; background: white; padding: 7px 9px; color: #17323e; font: inherit; font-size: 12px; }
+.dg-history-table-wrap { overflow-x: auto; }
+.dg-history-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.dg-history-table th { padding: 10px; background: #f5f8f9; color: #70848d; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+.dg-history-table td { border-top: 1px solid #edf1f2; padding: 11px 10px; vertical-align: top; }
+.dg-history-table tr:hover td { background: #fbfcfd; }
+.dg-history-button { min-height: 35px; border: 1px solid #cbd8dd; border-radius: 6px; background: white; color: #27424e; padding: 7px 11px; font-size: 11px; font-weight: 700; cursor: pointer; }
+.dg-history-button:hover { border-color: #8aa9a9; background: #f2f8f8; }
+.dg-history-empty { padding: 40px 12px; color: #80939b; text-align: center; font-size: 13px; }
+.dg-history-notice { margin-bottom: 12px; color: #a1433d; font-size: 12px; }
+.dg-history-detail { margin-top: 16px; border-top: 1px solid #e6edef; padding-top: 15px; }
+.dg-history-detail h2 { margin: 0 0 9px; font-size: 15px; }
+.dg-history-detail pre { max-height: 440px; overflow: auto; margin: 0; border-radius: 7px; background: #f5f8f9; padding: 13px; color: #304d59; font: 11px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 650px) { .dg-history-main { width: calc(100% - 22px); margin-top: 20px; } .dg-history-head { align-items: flex-start; flex-direction: column; } }

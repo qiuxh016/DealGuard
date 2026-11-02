@@ -26,12 +26,18 @@ def get_metrics(actor: DemoActor = Depends(get_current_actor), db: Session = Dep
     rows = db.scalars(select(RunRecord).where(RunRecord.tenant_id == actor.tenant_id)).all()
     decisions = [(row.result or {}).get("decision", {}).get("decision") for row in rows]
     durations = [row.duration_ms for row in rows if row.duration_ms is not None]
+    sorted_durations = sorted(durations)
+    p50_duration = sorted_durations[(len(sorted_durations) - 1) // 2] if sorted_durations else None
+    p95_duration = sorted_durations[(95 * len(sorted_durations) + 99) // 100 - 1] if sorted_durations else None
     input_values = [row.input_tokens for row in rows if row.input_tokens is not None]
     output_values = [row.output_tokens for row in rows if row.output_tokens is not None]
     return MetricsResponse(run_count=len(rows), allow_count=decisions.count("ALLOW"), review_count=decisions.count("REVIEW"),
         deny_count=decisions.count("DENY"), needs_input_count=decisions.count("NEEDS_INPUT"),
         failed_count=sum(row.status == "failed" for row in rows),
         avg_duration_ms=(sum(durations) / len(durations) if durations else None),
+        p50_duration_ms=p50_duration, p95_duration_ms=p95_duration,
+        demo_run_count=sum(row.execution_mode == "demo" for row in rows),
+        llm_run_count=sum(row.execution_mode == "llm" for row in rows),
         input_tokens=sum(input_values) if input_values else None, output_tokens=sum(output_values) if output_values else None)
 
 

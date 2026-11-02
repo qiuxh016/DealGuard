@@ -58,8 +58,9 @@ def _rrf_rank(rankings: list[list[str]], k: int = 60) -> list[str]:
     return sorted(scores, key=lambda policy_id: (-scores[policy_id], policy_id))
 
 
-def _metrics(cases: list[dict[str, Any]], rankings: list[list[str]]) -> dict[str, float | int]:
+def _metrics(cases: list[dict[str, Any]], rankings: list[list[str]]) -> dict[str, Any]:
     reciprocal_ranks = []
+    failed_case_ids = []
     hits_at_1 = 0
     hits_at_3 = 0
     for case, ranking in zip(cases, rankings):
@@ -68,12 +69,15 @@ def _metrics(cases: list[dict[str, Any]], rankings: list[list[str]]) -> dict[str
         reciprocal_ranks.append(1 / position if position else 0.0)
         hits_at_1 += int(position == 1)
         hits_at_3 += int(position is not None and position <= 3)
+        if position != 1:
+            failed_case_ids.append(case["case_id"])
     total = len(cases)
     return {
         "cases": total,
         "citation_accuracy_at_1": hits_at_1 / total if total else 0.0,
         "recall_at_3": hits_at_3 / total if total else 0.0,
         "mrr": sum(reciprocal_ranks) / total if total else 0.0,
+        "failed_case_ids": failed_case_ids,
     }
 
 

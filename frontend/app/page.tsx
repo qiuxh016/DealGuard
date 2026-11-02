@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import "./workspace.css";
 
 type Actor = "sales_a" | "sales_b" | "admin" | "manager";
@@ -70,7 +71,7 @@ export default function HomePage() {
   const [diffBase, setDiffBase] = useState("");
   const [diffCompare, setDiffCompare] = useState("");
   const [diffResult, setDiffResult] = useState<{ base: { version: string; decision: { decision: string; reason_code: string }; breakdown?: { total: string } | null }; compare: { version: string; decision: { decision: string; reason_code: string }; breakdown?: { total: string } | null } } | null>(null);
-  const [metrics, setMetrics] = useState<{ run_count: number; allow_count: number; review_count: number; deny_count: number; avg_duration_ms: number | null; input_tokens: number | null; output_tokens: number | null } | null>(null);
+  const [metrics, setMetrics] = useState<{ run_count: number; allow_count: number; review_count: number; deny_count: number; avg_duration_ms: number | null; p50_duration_ms: number | null; p95_duration_ms: number | null; demo_run_count: number; llm_run_count: number; input_tokens: number | null; output_tokens: number | null } | null>(null);
   const runKeyRef = useRef<{ actor: Actor; inquiry: string; key: string } | null>(null);
   const activePolicy = useMemo(() => policies.find((policy) => policy.status === "active"), [policies]);
 
@@ -237,6 +238,7 @@ export default function HomePage() {
             <div><div className="dg-brand-name">DealGuard</div><div className="dg-brand-subtitle">Policy-aware transaction workspace</div></div>
             <span className="dg-demo-tag">{DEMO_MODE ? "DEMO MODE" : "AUTHENTICATED"}</span>
           </div>
+          <nav className="dg-top-nav" aria-label="主导航"><Link href="/runs">运行记录</Link>{(actor === "manager" || actor === "admin") && <Link href="/evaluation">检索评测</Link>}{actor === "admin" && <Link href="/audit">政策审计</Link>}</nav>
           <div className="dg-header-actions">
             {DEMO_MODE ? <label className="dg-actor"><span>演示身份</span>
               <select value={actor} onChange={(event) => { setActor(event.target.value as Actor); setResult(null); }}>
@@ -267,7 +269,8 @@ export default function HomePage() {
         {(actor === "admin" || actor === "manager") && metrics && <section className="dg-metrics" aria-label="运行指标">
           <div className="dg-metric"><div className="dg-metric-label">运行总数</div><div className="dg-metric-value">{metrics.run_count}</div></div>
           <div className="dg-metric"><div className="dg-metric-label">允许 / 审批 / 拒绝</div><div className="dg-metric-value">{metrics.allow_count} / {metrics.review_count} / {metrics.deny_count}</div></div>
-          <div className="dg-metric"><div className="dg-metric-label">平均耗时</div><div className="dg-metric-value">{metrics.avg_duration_ms == null ? "未知" : `${Math.round(metrics.avg_duration_ms)} ms`}</div></div>
+          <div className="dg-metric"><div className="dg-metric-label">耗时 P50 / P95</div><div className="dg-metric-value">{metrics.p50_duration_ms == null ? "未知" : `${metrics.p50_duration_ms} / ${metrics.p95_duration_ms} ms`}</div></div>
+          <div className="dg-metric"><div className="dg-metric-label">执行模式</div><div className="dg-metric-value">Demo {metrics.demo_run_count} / LLM {metrics.llm_run_count}</div></div>
           <div className="dg-metric"><div className="dg-metric-label">Token 用量</div><div className="dg-metric-value">{metrics.input_tokens == null ? "未知（Demo/未提供）" : `${metrics.input_tokens} in / ${metrics.output_tokens ?? 0} out`}</div></div>
         </section>}
 

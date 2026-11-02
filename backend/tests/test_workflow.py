@@ -500,6 +500,8 @@ def test_metrics_duration_and_csv_match_saved_quote(client):
     assert all(event.get("details", {}).get("duration_ms") is not None for event in result["trace"][:-1])
     metrics = client.get("/api/v1/metrics", headers={"X-Demo-Actor": "admin"}).json()
     assert metrics["run_count"] == 1 and metrics["allow_count"] == 1
+    assert metrics["p50_duration_ms"] == metrics["p95_duration_ms"] == metrics["avg_duration_ms"]
+    assert metrics["demo_run_count"] == 1 and metrics["llm_run_count"] == 0
     assert metrics["input_tokens"] is None and metrics["output_tokens"] is None
     exported = client.get(f"/api/v1/quotes/{result['quote']['id']}/export.csv")
     assert exported.status_code == 200

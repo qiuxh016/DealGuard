@@ -79,6 +79,40 @@ test("core quote, policy switch, ownership guard, and untrusted policy upload fl
     await expect(page.locator(".dg-decision-name")).toHaveText("DENY");
     await expect(page.locator(".dg-decision-code")).toHaveText("DISCOUNT_LIMIT_EXCEEDED");
     await page.screenshot({ path: join(tmpdir(), "dealguard-e2e-policy-injection-blocked.png"), fullPage: true });
+
+    await page.getByRole("link", { name: "运行记录" }).click();
+    await expect(page).toHaveURL(/\/runs$/);
+    await expect(page.getByRole("heading", { name: "运行记录" })).toBeVisible();
+    await page.getByLabel("决策").selectOption("DENY");
+    await page.getByRole("button", { name: "筛选" }).click();
+    await expect(page.locator(".dg-history-table tbody tr").first()).toContainText("DENY");
+    await page.getByRole("button", { name: "查看 Trace" }).first().click();
+    await expect(page.getByRole("heading", { name: /运行详情/ })).toBeVisible();
+    await page.screenshot({ path: join(tmpdir(), "dealguard-e2e-runs.png"), fullPage: true });
+
+    await page.getByLabel("演示身份").selectOption("admin");
+    await page.getByRole("link", { name: "政策审计" }).click();
+    await expect(page).toHaveURL(/\/audit$/);
+    await expect(page.getByRole("heading", { name: "政策管理审计" })).toBeVisible();
+    await expect(page.locator(".dg-history-table tbody tr").first()).toContainText("policy_");
+    await page.getByRole("link", { name: "检索评测" }).click();
+    await expect(page).toHaveURL(/\/evaluation$/);
+    await expect(page.getByRole("heading", { name: "检索评测" })).toBeVisible();
+    await expect(page.locator(".dg-history-table tbody")).toContainText("RRF 融合");
+    await page.getByLabel("数据切分").selectOption("holdout");
+    await expect(page.locator(".dg-history-table tbody")).toContainText("15");
+    const reportDownload = page.waitForEvent("download");
+    await page.getByRole("button", { name: "导出 JSON" }).click();
+    expect((await reportDownload).suggestedFilename()).toBe("dealguard-evaluation-holdout.json");
+
+    await page.goto("/audit");
+    await page.getByLabel("演示身份").selectOption("manager");
+    await expect(page.getByRole("status")).toContainText("Only the demo admin");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(page.getByRole("heading", { name: "政策管理审计" })).toBeVisible();
+    await expect(page.locator(".dg-history-table tbody tr")).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBeFalsy();
+    await page.screenshot({ path: join(tmpdir(), "dealguard-e2e-audit-mobile.png"), fullPage: false });
   } finally {
     const reset = await page.request.post("http://127.0.0.1:8001/api/v1/demo/reset", {
       headers: { "X-Demo-Actor": "admin" },
@@ -86,8 +120,8 @@ test("core quote, policy switch, ownership guard, and untrusted policy upload fl
     expect(reset.ok()).toBeTruthy();
   }
   expect(pageErrors).toEqual([]);
-  // The two console network errors are the expected 404 read and 403 update from the ownership attack check.
-  expect(consoleErrors).toHaveLength(2);
+  // Expected errors are the ownership 404/403 and the audit 403 for the manager.
+  expect(consoleErrors).toHaveLength(3);
   expect(consoleErrors.some((message) => message.includes("404"))).toBeTruthy();
   expect(consoleErrors.some((message) => message.includes("403"))).toBeTruthy();
 });

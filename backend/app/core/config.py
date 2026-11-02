@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     llm_base_url: str = ""
     llm_model: str = ""
     embedding_model: str = ""
+    auth_login_max_attempts: int = 5
+    auth_login_window_seconds: int = 300
 
     model_config = SettingsConfigDict(env_file="../.env", extra="ignore")
 

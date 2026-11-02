@@ -54,6 +54,21 @@ def test_login_failure_does_not_disclose_unknown_account(client):
     assert unknown.json() == wrong_password.json()
 
 
+def test_login_rate_limit_is_configurable_per_client_ip(client, monkeypatch):
+    from app.api.routes import auth as auth_route
+
+    monkeypatch.setattr(auth_route, "_login_failures", {})
+    monkeypatch.setattr(settings, "auth_login_max_attempts", 3)
+    monkeypatch.setattr(settings, "auth_login_window_seconds", 60)
+    for index in range(3):
+        response = client.post("/api/v1/auth/login", json={"actor_id": f"missing-{index}", "password": "incorrect"})
+        assert response.status_code == 401
+    limited = client.post("/api/v1/auth/login", json={"actor_id": "another-missing", "password": "incorrect"})
+    assert limited.status_code == 429
+    assert limited.json()["detail"]["code"] == "LOGIN_RATE_LIMITED"
+    assert int(limited.headers["Retry-After"]) > 0
+
+
 def test_production_rejects_demo_actor_header(client, monkeypatch):
     monkeypatch.setattr(settings, "app_env", "production")
     assert client.get("/api/v1/policies", headers={"X-Demo-Actor": "admin"}).status_code == 401

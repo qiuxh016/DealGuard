@@ -30,6 +30,9 @@ button, select { -webkit-tap-highlight-color: transparent; }
 .dg-brand-name { font-size: 17px; font-weight: 750; letter-spacing: -.02em; }
 .dg-brand-subtitle { color: var(--dg-muted); font-size: 11px; margin-top: 2px; }
 .dg-demo-tag { color: #8a5329; background: #fbf3e9; font-size: 10px; font-weight: 750; letter-spacing: .09em; padding: 6px 9px; border-radius: 5px; margin-left: 3px; white-space: nowrap; }
+.dg-top-nav { display: flex; align-items: center; gap: 15px; margin-left: auto; }
+.dg-top-nav a { color: #536c78; text-decoration: none; font-size: 12px; font-weight: 650; }
+.dg-top-nav a:hover { color: var(--dg-blue); }
 .dg-header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
 .dg-actor { display: flex; align-items: center; gap: 10px; color: var(--dg-muted); font-size: 12px; }
 .dg-actor select { min-width: 190px; border: 1px solid var(--dg-line); border-radius: 10px; background: #fff; color: var(--dg-ink); padding: 9px 34px 9px 11px; font-size: 13px; font-weight: 650; outline: none; transition: border .18s, box-shadow .18s; }
@@ -180,6 +183,7 @@ button:disabled { box-shadow: none; }
   .dg-brand-mark { width: 34px; height: 34px; }
   .dg-brand-name { font-size: 15px; }
   .dg-brand-subtitle { font-size: 9px; }
+  .dg-top-nav { margin-left: 0; }
   .dg-demo-tag { margin-left: auto; font-size: 8px; padding: 5px 6px; }
   .dg-header-actions { width: 100%; justify-content: space-between; }
   .dg-actor { width: 100%; justify-content: space-between; }

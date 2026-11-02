@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
+from collections import deque
 from hashlib import sha256
+from time import monotonic
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
@@ -12,6 +14,7 @@ from app.db.models import AuthAccount, AuthSession, DemoActor
 from app.services.actors import COOKIE_NAME, SESSION_TTL, actor_payload, get_session_actor, issue_session, verify_password
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
+_login_failures: dict[str, deque[float]] = {}
 
 
 class LoginRequest(BaseModel):
@@ -20,10 +23,22 @@ class LoginRequest(BaseModel):
 
 
 @router.post("/login")
-def login(body: LoginRequest, response: Response, db: Session = Depends(get_db)):
+def login(body: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
+    now = monotonic()
+    window = max(1, settings.auth_login_window_seconds)
+    client_host = request.client.host if request.client else "unknown"
+    rate_key = f"ip:{client_host}"
+    attempts = _login_failures.setdefault(rate_key, deque())
+    while attempts and now - attempts[0] >= window:
+        attempts.popleft()
+    if len(attempts) >= max(1, settings.auth_login_max_attempts):
+        retry_after = max(1, int(window - (now - attempts[0])))
+        raise HTTPException(status_code=429, headers={"Retry-After": str(retry_after)},
+                            detail={"code": "LOGIN_RATE_LIMITED", "message": "Too many failed sign-in attempts. Try again shortly."})
     actor = db.get(DemoActor, body.actor_id)
     account = db.get(AuthAccount, body.actor_id)
     if actor is None or account is None or not account.is_active or not verify_password(body.password, account.password_hash):
+        attempts.append(now)
         raise HTTPException(status_code=401, detail={"code": "INVALID_CREDENTIALS", "message": "Actor ID or password is incorrect."})
     token, _ = issue_session(db, actor.id)
     response.set_cookie(COOKIE_NAME, token, max_age=int(SESSION_TTL.total_seconds()), httponly=True,

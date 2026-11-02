@@ -205,5 +205,9 @@ class MetricsResponse(BaseModel):
     needs_input_count: int
     failed_count: int
     avg_duration_ms: float | None
+    p50_duration_ms: int | None
+    p95_duration_ms: int | None
+    demo_run_count: int
+    llm_run_count: int
     input_tokens: int | None
     output_tokens: int | None
