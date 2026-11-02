@@ -24,17 +24,17 @@ def seed_demo_data(db: Session) -> None:
             Customer(id="C-002", name="HarborLight Standard Buyer", tier="Standard", tenant_id=TENANT_ID),
             Product(id="P-100", name="Product A", currency="USD", unit_price=Decimal("100.00"), stock=2000),
             Policy(
-                policy_id=POLICY_ID, version="v1", title="VIP discount limit v1", status="active",
+                policy_id=POLICY_ID, version="v1", title="VIP discount limit v1", action_type="quote_discount", status="active",
                 customer_tier="VIP", max_discount_pct=Decimal("10.00"), exception_approval_allowed=False,
                 effective_from=datetime(2026, 1, 1, tzinfo=timezone.utc), source=POLICY_TEXT["v1"],
             ),
             Policy(
-                policy_id=POLICY_ID, version="v2", title="VIP discount limit v2", status="inactive",
+                policy_id=POLICY_ID, version="v2", title="VIP discount limit v2", action_type="quote_discount", status="inactive",
                 customer_tier="VIP", max_discount_pct=Decimal("5.00"), exception_approval_allowed=False,
                 effective_from=datetime(2026, 11, 1, tzinfo=timezone.utc), source=POLICY_TEXT["v2"],
             ),
             Policy(
-                policy_id=POLICY_ID, version="v3", title="VIP discount limit v3 with manager review", status="inactive",
+                policy_id=POLICY_ID, version="v3", title="VIP discount limit v3 with manager review", action_type="quote_discount", status="inactive",
                 customer_tier="VIP", max_discount_pct=Decimal("5.00"), review_max_discount_pct=Decimal("8.00"),
                 exception_approval_allowed=True, effective_from=datetime(2026, 1, 1, tzinfo=timezone.utc), source=POLICY_TEXT["v3"],
             ),
@@ -49,7 +49,7 @@ def seed_demo_data(db: Session) -> None:
         db.add(DemoActor(id="manager", display_name="Demo Manager", role="manager", customer_id=None))
     if not is_new_demo and not db.scalar(select(Policy).where(Policy.policy_id == POLICY_ID, Policy.version == "v3")):
         db.add(Policy(
-            policy_id=POLICY_ID, version="v3", title="VIP discount limit v3 with manager review", status="inactive",
+            policy_id=POLICY_ID, version="v3", title="VIP discount limit v3 with manager review", action_type="quote_discount", status="inactive",
             customer_tier="VIP", max_discount_pct=Decimal("5.00"), review_max_discount_pct=Decimal("8.00"),
             exception_approval_allowed=True, effective_from=datetime(2026, 1, 1, tzinfo=timezone.utc), source=POLICY_TEXT["v3"],
         ))

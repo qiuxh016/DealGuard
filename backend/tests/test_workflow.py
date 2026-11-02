@@ -468,10 +468,10 @@ def test_policy_upload_requires_admin_and_structured_confirmation(client):
     assert uploaded.status_code == 200
     draft = uploaded.json()
     assert draft["status"] == "draft" and draft["max_discount_pct"] is None
-    assert client.put(f"/api/v1/policy-drafts/{draft['id']}", headers={"X-Demo-Actor": "sales_a"}, json={"title": "No", "max_discount_pct": 5}).status_code == 403
+    assert client.put(f"/api/v1/policy-drafts/{draft['id']}", headers={"X-Demo-Actor": "sales_a"}, json={"title": "No", "action_type": "quote_discount", "max_discount_pct": 5}).status_code == 403
     assert client.post(f"/api/v1/policy-drafts/{draft['id']}/activate", headers={"X-Demo-Actor": "admin"}).status_code == 409
     edited = client.put(f"/api/v1/policy-drafts/{draft['id']}", headers={"X-Demo-Actor": "admin"}, json={
-        "title": "Custom VIP rule", "customer_tier": "VIP", "max_discount_pct": 4,
+        "title": "Custom VIP rule", "action_type": "quote_discount", "customer_tier": "VIP", "max_discount_pct": 4,
         "review_max_discount_pct": 6, "exception_approval_allowed": True,
     })
     assert edited.status_code == 200

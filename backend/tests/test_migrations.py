@@ -26,7 +26,10 @@ def test_legacy_sqlite_migrates_without_losing_rows(tmp_path, monkeypatch):
         assert connection.scalar(text("SELECT source FROM policies WHERE id='p1'")) == "source-v1"
         assert connection.scalar(text("SELECT inquiry FROM runs WHERE id='r1'")) == "quote"
         assert "legacy" in connection.scalar(text("SELECT result FROM runs WHERE id='r1'"))
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0006_drop_legacy_idempotency_index"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0007_policy_action_scope"
+        assert connection.scalar(text("SELECT action_type FROM policies WHERE id='p1'")) == "quote_discount"
+        assert next(column for column in inspect(connection).get_columns("policies") if column["name"] == "max_discount_pct")["nullable"] is True
+        assert "action_type" in {column["name"] for column in inspect(connection).get_columns("policy_drafts")}
         assert connection.scalar(text("SELECT attempt FROM runs WHERE id='r1'")) == 1
         assert connection.scalar(text("SELECT lease_expires_at FROM runs WHERE id='r1'")) is None
     tables = set(inspect(engine).get_table_names())

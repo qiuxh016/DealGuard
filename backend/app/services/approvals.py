@@ -100,7 +100,7 @@ def process_approval(db: Session, actor: DemoActor, approval_id: str, approve: b
     applicant = db.get(DemoActor, row.applicant_actor_id)
     customer = db.scalar(select(Customer).where(Customer.id == row.customer_id, Customer.tenant_id == actor.tenant_id))
     product = db.scalar(select(Product).where(Product.id == row.product_id, Product.tenant_id == actor.tenant_id))
-    policies = db.scalars(select(Policy).where(Policy.tenant_id == actor.tenant_id, Policy.policy_id == row.policy_id, Policy.customer_tier == (customer.tier if customer else ""), Policy.status == "active")).all()
+    policies = db.scalars(select(Policy).where(Policy.tenant_id == actor.tenant_id, Policy.policy_id == row.policy_id, Policy.action_type == "quote_discount", Policy.customer_tier == (customer.tier if customer else ""), Policy.status == "active")).all()
     now = datetime.now(timezone.utc)
     current = next((p for p in policies if (p.effective_from.replace(tzinfo=timezone.utc) if p.effective_from.tzinfo is None else p.effective_from) <= now and (p.effective_to is None or (p.effective_to.replace(tzinfo=timezone.utc) if p.effective_to.tzinfo is None else p.effective_to) > now)), None)
     stale_code = None

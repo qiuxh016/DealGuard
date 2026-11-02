@@ -13,6 +13,7 @@ def list_policies(db: Session, tenant_id: str) -> list[PolicyResponse]:
     return [
         PolicyResponse(
             id=row.id, policy_id=row.policy_id, version=row.version, title=row.title,
+            action_type=row.action_type,
             status=row.status, max_discount_pct=row.max_discount_pct,
             review_max_discount_pct=row.review_max_discount_pct,
             exception_approval_allowed=row.exception_approval_allowed, source=row.source,
@@ -31,13 +32,15 @@ def activate_policy(db: Session, actor: DemoActor, policy_row_id: str) -> Policy
     if selected.effective_from.replace(tzinfo=timezone.utc) > now:
         raise HTTPException(status_code=409, detail={"code": "POLICY_NOT_EFFECTIVE", "message": "This policy version is not effective yet."})
     versions = db.scalars(select(Policy).where(Policy.policy_id == selected.policy_id, Policy.tenant_id == actor.tenant_id)).all()
+    if any(version.action_type != selected.action_type for version in versions):
+        raise HTTPException(status_code=409, detail={"code": "POLICY_ACTION_MISMATCH", "message": "Versions of one policy ID must share an action scope."})
     for version in versions:
         version.status = "active" if version.id == selected.id else "inactive"
     db.commit()
     db.refresh(selected)
     return PolicyResponse(
         id=selected.id, policy_id=selected.policy_id, version=selected.version,
-        title=selected.title, status=selected.status,
+        title=selected.title, action_type=selected.action_type, status=selected.status,
         max_discount_pct=selected.max_discount_pct,
         review_max_discount_pct=selected.review_max_discount_pct,
         exception_approval_allowed=selected.exception_approval_allowed,

@@ -2,7 +2,9 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+PolicyActionType = Literal["quote_discount", "reference_only"]
 
 
 class InquiryRequest(BaseModel):
@@ -91,8 +93,9 @@ class PolicyResponse(BaseModel):
     policy_id: str
     version: str
     title: str
+    action_type: PolicyActionType
     status: Literal["active", "inactive"]
-    max_discount_pct: Decimal
+    max_discount_pct: Decimal | None = None
     review_max_discount_pct: Decimal | None = None
     exception_approval_allowed: bool
     source: str
@@ -137,10 +140,24 @@ class ApprovalRejectRequest(BaseModel):
 
 class PolicyDraftUpdate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
+    action_type: PolicyActionType
     customer_tier: Literal["VIP", "Standard"] = "VIP"
-    max_discount_pct: Decimal = Field(ge=0, le=100)
+    max_discount_pct: Decimal | None = Field(default=None, ge=0, le=100)
     review_max_discount_pct: Decimal | None = Field(default=None, ge=0, le=100)
     exception_approval_allowed: bool = False
+
+    @model_validator(mode="after")
+    def validate_action_rules(self):
+        if self.action_type == "quote_discount":
+            if self.max_discount_pct is None:
+                raise ValueError("A discount policy must define its direct discount limit.")
+            if self.exception_approval_allowed and (self.review_max_discount_pct is None or self.review_max_discount_pct <= self.max_discount_pct):
+                raise ValueError("The review limit must exceed the direct discount limit.")
+            if not self.exception_approval_allowed and self.review_max_discount_pct is not None:
+                raise ValueError("A review limit is only valid when manager exceptions are enabled.")
+        elif self.max_discount_pct is not None or self.review_max_discount_pct is not None or self.exception_approval_allowed:
+            raise ValueError("Reference-only policies cannot define quote discount rules.")
+        return self
 
 
 class PolicyDraftResponse(BaseModel):
@@ -148,6 +165,7 @@ class PolicyDraftResponse(BaseModel):
     policy_id: str
     version: str
     title: str
+    action_type: PolicyActionType | None = None
     customer_tier: str
     max_discount_pct: Decimal | None
     review_max_discount_pct: Decimal | None

@@ -41,6 +41,7 @@ def _admin(actor: DemoActor):
 
 def _draft_response(row: PolicyDraft) -> PolicyDraftResponse:
     return PolicyDraftResponse(id=row.id, policy_id=row.policy_id, version=row.version, title=row.title,
+        action_type=row.action_type,
         customer_tier=row.customer_tier, max_discount_pct=row.max_discount_pct,
         review_max_discount_pct=row.review_max_discount_pct, exception_approval_allowed=row.exception_approval_allowed,
         status=row.status, source=row.source)
@@ -83,7 +84,7 @@ def edit_policy_draft(draft_id: str, body: PolicyDraftUpdate, actor: DemoActor =
         raise HTTPException(status_code=422, detail={"code": "INVALID_REVIEW_LIMIT", "message": "Review limit must exceed the direct discount limit."})
     if not body.exception_approval_allowed and body.review_max_discount_pct is not None:
         raise HTTPException(status_code=422, detail={"code": "UNUSED_REVIEW_LIMIT", "message": "Set the review limit only when manager approval exceptions are enabled."})
-    for field in ("title", "customer_tier", "max_discount_pct", "review_max_discount_pct", "exception_approval_allowed"):
+    for field in ("title", "action_type", "customer_tier", "max_discount_pct", "review_max_discount_pct", "exception_approval_allowed"):
         setattr(row, field, getattr(body, field))
     db.commit()
     db.refresh(row)
@@ -98,12 +99,19 @@ def activate_draft(draft_id: str, actor: DemoActor = Depends(get_current_actor),
         raise HTTPException(status_code=404, detail={"code": "POLICY_DRAFT_NOT_FOUND", "message": "Policy draft not found."})
     if row.status == "active" and row.policy_row_id:
         return _draft_response(row)
-    if row.max_discount_pct is None or (row.exception_approval_allowed and row.review_max_discount_pct is None):
+    if row.action_type is None:
+        raise HTTPException(status_code=409, detail={"code": "POLICY_ACTION_REQUIRED", "message": "Confirm the policy action scope before activation."})
+    if row.action_type == "quote_discount" and row.max_discount_pct is None:
         raise HTTPException(status_code=409, detail={"code": "POLICY_RULES_INCOMPLETE", "message": "Confirm structured discount rules before activation."})
+    if row.action_type == "reference_only" and (row.max_discount_pct is not None or row.review_max_discount_pct is not None or row.exception_approval_allowed):
+        raise HTTPException(status_code=409, detail={"code": "POLICY_ACTION_MISMATCH", "message": "Reference-only policies cannot carry executable discount rules."})
     duplicate = db.scalar(select(Policy).where(Policy.tenant_id == actor.tenant_id, Policy.policy_id == row.policy_id, Policy.version == row.version))
     if duplicate:
         raise HTTPException(status_code=409, detail={"code": "POLICY_VERSION_EXISTS", "message": "This policy ID and version already exist."})
-    policy = Policy(policy_id=row.policy_id, version=row.version, title=row.title, status="inactive",
+    siblings = db.scalars(select(Policy).where(Policy.tenant_id == actor.tenant_id, Policy.policy_id == row.policy_id)).all()
+    if any(item.action_type != row.action_type for item in siblings):
+        raise HTTPException(status_code=409, detail={"code": "POLICY_ACTION_MISMATCH", "message": "Versions of one policy ID must share an action scope."})
+    policy = Policy(policy_id=row.policy_id, version=row.version, title=row.title, action_type=row.action_type, status="inactive",
         customer_tier=row.customer_tier, max_discount_pct=row.max_discount_pct,
         review_max_discount_pct=row.review_max_discount_pct, exception_approval_allowed=row.exception_approval_allowed,
         effective_from=datetime.now(timezone.utc), source=row.source, tenant_id=actor.tenant_id)
@@ -131,6 +139,8 @@ def compare_policies(body: PolicyDiffRequest, actor: DemoActor = Depends(get_cur
         raise HTTPException(status_code=404, detail={"code": "POLICY_VERSION_NOT_FOUND", "message": "Both registered policy versions are required."})
     if base.customer_tier != compare.customer_tier:
         raise HTTPException(status_code=422, detail={"code": "POLICY_SCOPE_MISMATCH", "message": "Policy versions must apply to the same customer tier."})
+    if base.action_type != compare.action_type:
+        raise HTTPException(status_code=422, detail={"code": "POLICY_ACTION_MISMATCH", "message": "Policy versions must authorize the same action."})
     proposal = ActionProposal(customer_id=customer.id if customer else "", product_id=intent.product_id or "", quantity=intent.quantity or 1,
                               requested_discount_pct=intent.requested_discount_pct or Decimal("0"))
     missing = [name for name in ("product_id", "quantity", "requested_discount_pct") if getattr(intent, name) is None]

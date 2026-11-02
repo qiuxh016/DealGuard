@@ -25,8 +25,14 @@ def evaluate_quote(
         return GuardDecision(decision="DENY", reason_code="SALES_ROLE_REQUIRED", human_message="A sales demo actor is required to prepare a quote."), None
     if actor.customer_id != customer.id:
         return GuardDecision(decision="DENY", reason_code="RESOURCE_NOT_OWNED", human_message="This demo actor cannot quote for the selected customer."), None
+    if policy is not None and policy.action_type != "quote_discount":
+        return GuardDecision(decision="DENY", reason_code="POLICY_ACTION_MISMATCH", policy_id=policy.policy_id, policy_version=policy.version,
+                             human_message="This policy does not authorize discount quotes."), None
     if customer.tier != "VIP" or policy is None:
         return GuardDecision(decision="DENY", reason_code="NO_APPLICABLE_POLICY", human_message="No active discount policy applies to this verified customer tier."), None
+    if policy.max_discount_pct is None:
+        return GuardDecision(decision="DENY", reason_code="POLICY_RULES_INCOMPLETE", policy_id=policy.policy_id, policy_version=policy.version,
+                             human_message="The active discount policy has no structured discount limit."), None
     if proposal.quantity <= 0:
         return GuardDecision(decision="DENY", reason_code="INVALID_QUANTITY", policy_id=policy.policy_id, policy_version=policy.version, human_message="Quantity must be greater than zero."), None
     if proposal.quantity > product.stock:

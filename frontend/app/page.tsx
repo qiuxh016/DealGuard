@@ -5,11 +5,11 @@ import "./workspace.css";
 
 type Actor = "sales_a" | "sales_b" | "admin" | "manager";
 type Policy = {
-  id: string; policy_id: string; version: string; title: string; status: "active" | "inactive";
-  max_discount_pct: string; review_max_discount_pct: string | null; exception_approval_allowed: boolean; source: string;
+  id: string; policy_id: string; version: string; title: string; action_type: "quote_discount" | "reference_only"; status: "active" | "inactive";
+  max_discount_pct: string | null; review_max_discount_pct: string | null; exception_approval_allowed: boolean; source: string;
 };
 type Approval = { id: string; run_id: string; applicant_actor_id: string; customer_id: string; product_id: string; quantity: number; discount_pct: string; policy_id: string; policy_version: string; state: string };
-type PolicyDraft = { id: string; policy_id: string; version: string; title: string; source: string; max_discount_pct: string | null; review_max_discount_pct: string | null; exception_approval_allowed: boolean; status: string };
+type PolicyDraft = { id: string; policy_id: string; version: string; title: string; source: string; action_type: "quote_discount" | "reference_only" | null; max_discount_pct: string | null; review_max_discount_pct: string | null; exception_approval_allowed: boolean; status: string };
 type RunResult = {
   run_id: string; status: "completed" | "needs_input" | "failed"; execution_mode: "llm" | "demo";
   intent?: { product_id?: string | null; quantity?: number | null; requested_discount_pct?: string | null } | null;
@@ -63,6 +63,7 @@ export default function HomePage() {
   const [draftPolicyId, setDraftPolicyId] = useState("DISCOUNT-02");
   const [draftVersion, setDraftVersion] = useState("v1");
   const [draftTitle, setDraftTitle] = useState("New VIP discount rule");
+  const [draftActionType, setDraftActionType] = useState<"quote_discount" | "reference_only">("quote_discount");
   const [directLimit, setDirectLimit] = useState("5");
   const [reviewLimit, setReviewLimit] = useState("8");
   const [exceptionEnabled, setExceptionEnabled] = useState(true);
@@ -160,7 +161,7 @@ export default function HomePage() {
     setBusy(true);
     try {
       const created = await apiRequest<PolicyDraft>("/api/v1/policy-drafts", actor, { method: "POST", body: form });
-      setPolicyDraft(created); setNotice("政策文本已保存为草稿；它不会直接成为授权规则");
+      setPolicyDraft(created); setDraftActionType(created.action_type ?? "quote_discount"); setNotice("政策文本已保存为草稿；它不会直接成为授权规则");
     } catch (error) { setNotice(error instanceof Error ? error.message : "上传失败"); }
     finally { setBusy(false); }
   }
@@ -169,7 +170,12 @@ export default function HomePage() {
     if (!policyDraft) return;
     setBusy(true);
     try {
-      const body = { title: draftTitle, customer_tier: "VIP", max_discount_pct: Number(directLimit), review_max_discount_pct: exceptionEnabled ? Number(reviewLimit) : null, exception_approval_allowed: exceptionEnabled };
+      const body = {
+        title: draftTitle, action_type: draftActionType, customer_tier: "VIP",
+        max_discount_pct: draftActionType === "quote_discount" ? Number(directLimit) : null,
+        review_max_discount_pct: draftActionType === "quote_discount" && exceptionEnabled ? Number(reviewLimit) : null,
+        exception_approval_allowed: draftActionType === "quote_discount" && exceptionEnabled,
+      };
       const saved = await apiRequest<PolicyDraft>(`/api/v1/policy-drafts/${policyDraft.id}`, actor, { method: "PUT", body: JSON.stringify(body) });
       setPolicyDraft(saved);
       if (activate) {
@@ -304,7 +310,7 @@ export default function HomePage() {
               <div className="dg-panel-heading"><div><div className="dg-kicker">03 · Policy center</div><h2>政策版本</h2></div></div>
               <div className="dg-policy-list">{policies.map((policy) => <article key={policy.id} className={`dg-policy-row ${policy.status === "active" ? "dg-policy-row-active" : ""}`}>
                 <div className="dg-policy-row-top"><strong className="dg-policy-id">{policy.policy_id}@{policy.version}</strong><span className={`dg-status ${policy.status === "active" ? "dg-status-active" : ""}`}>{policy.status}</span></div>
-                <p className="dg-policy-limit">VIP 折扣上限 <strong>{policy.max_discount_pct}%</strong>{policy.review_max_discount_pct && <> · 审批上限 <strong>{policy.review_max_discount_pct}%</strong></>}</p>
+                <p className="dg-policy-limit">{policy.action_type === "quote_discount" ? <>折扣报价 · 直接上限 <strong>{policy.max_discount_pct}%</strong>{policy.review_max_discount_pct && <> · 审批上限 <strong>{policy.review_max_discount_pct}%</strong></>}</> : "仅供检索参考，不授权报价"}</p>
                 {actor === "admin" && policy.status !== "active" && <div className="dg-policy-actions"><button onClick={() => activatePolicy(policy)} disabled={busy} className="dg-button dg-button-small dg-button-secondary">激活此版本</button></div>}
               </article>)}</div>
               {actor !== "admin" && <p className="dg-policy-only-admin">仅 Demo Admin 可以激活预置版本。</p>}
@@ -315,7 +321,7 @@ export default function HomePage() {
                 <button disabled={busy} className="dg-button dg-button-small dg-button-secondary">保存来源草稿</button>
               </form>}
               {actor === "admin" && policyDraft && <div className="dg-upload"><h3>{policyDraft.policy_id}@{policyDraft.version} · {policyDraft.status}</h3>
-                <div className="dg-rule-fields"><label>政策标题<input aria-label="政策标题" value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} className="dg-control"/></label><label>直接折扣上限 %<input type="number" min="0" max="100" value={directLimit} onChange={(event) => setDirectLimit(event.target.value)} className="dg-control"/></label><label className="dg-checkbox"><input type="checkbox" checked={exceptionEnabled} onChange={(event) => setExceptionEnabled(event.target.checked)}/>允许例外审批</label>{exceptionEnabled && <label>审批折扣上限 %<input type="number" min="0" max="100" value={reviewLimit} onChange={(event) => setReviewLimit(event.target.value)} className="dg-control"/></label>}</div>
+                <div className="dg-rule-fields"><label>政策标题<input aria-label="政策标题" value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} className="dg-control"/></label><label>授权范围<select aria-label="政策动作范围" value={draftActionType} onChange={(event) => setDraftActionType(event.target.value as "quote_discount" | "reference_only")} className="dg-control"><option value="quote_discount">折扣报价规则</option><option value="reference_only">仅供检索参考</option></select></label>{draftActionType === "quote_discount" && <><label>直接折扣上限 %<input type="number" min="0" max="100" value={directLimit} onChange={(event) => setDirectLimit(event.target.value)} className="dg-control"/></label><label className="dg-checkbox"><input type="checkbox" checked={exceptionEnabled} onChange={(event) => setExceptionEnabled(event.target.checked)}/>允许例外审批</label>{exceptionEnabled && <label>审批折扣上限 %<input type="number" min="0" max="100" value={reviewLimit} onChange={(event) => setReviewLimit(event.target.value)} className="dg-control"/></label>}</>}</div>
                 <div className="dg-draft-actions"><button onClick={() => void savePolicyDraft(false)} disabled={busy || policyDraft.status === "active"} className="dg-button dg-button-small dg-button-secondary">保存规则</button><button onClick={() => void savePolicyDraft(true)} disabled={busy || policyDraft.status === "active"} className="dg-button dg-button-small">保存并激活</button></div>
               </div>}
 

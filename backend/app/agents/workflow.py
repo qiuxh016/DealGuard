@@ -128,7 +128,12 @@ def _retrieve_policy(state: DealGuardState) -> dict[str, Any]:
     if customer is not None:
         now = datetime.now(timezone.utc)
         candidates = [
-            row for row in db.scalars(select(Policy).where(Policy.tenant_id == customer.tenant_id, Policy.status == "active", Policy.customer_tier == customer.tier)).all()
+            row for row in db.scalars(select(Policy).where(
+                Policy.tenant_id == customer.tenant_id,
+                Policy.action_type == "quote_discount",
+                Policy.status == "active",
+                Policy.customer_tier == customer.tier,
+            )).all()
             if _eligible_policy(row, now)
         ]
     policy = None

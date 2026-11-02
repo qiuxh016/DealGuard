@@ -25,7 +25,7 @@ def update_quote(db: Session, actor: DemoActor, quote_id: str, body: QuoteUpdate
     if actor.role != "sales" or row.owner_actor_id != actor.id or row.customer_id != actor.customer_id:
         raise HTTPException(status_code=403, detail={"code": "RESOURCE_NOT_OWNED", "message": "This demo actor cannot update this quote."})
     product = db.query(Product).filter(Product.id == row.product_id, Product.tenant_id == actor.tenant_id).first()
-    active_policy = db.query(Policy).filter_by(tenant_id=actor.tenant_id, policy_id=row.policy_id, status="active", customer_tier="VIP").first()
+    active_policy = db.query(Policy).filter_by(tenant_id=actor.tenant_id, policy_id=row.policy_id, action_type="quote_discount", status="active", customer_tier="VIP").first()
     customer = db.query(Customer).filter(Customer.id == row.customer_id, Customer.tenant_id == actor.tenant_id).first()
     if product is None or customer is None or active_policy is None:
         raise HTTPException(status_code=409, detail={"code": "CURRENT_CONTEXT_UNAVAILABLE", "message": "Current quote context is unavailable; the draft was not changed."})
