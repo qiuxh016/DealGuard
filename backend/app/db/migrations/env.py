@@ -1,7 +1,7 @@
 from logging.config import fileConfig
 import os
 from alembic import context
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import engine_from_config, inspect, pool
 from app.db.database import Base
 from app.db import models  # noqa: F401
 
@@ -23,6 +23,13 @@ def run_migrations_online():
     connectable = engine_from_config(config.get_section(config.config_ini_section), prefix="sqlalchemy.",
                                      poolclass=pool.NullPool)
     with connectable.connect() as connection:
+        if connection.dialect.name == "postgresql":
+            tables = inspect(connection).get_table_names()
+            if "alembic_version" in tables:
+                version_column = next(column for column in inspect(connection).get_columns("alembic_version") if column["name"] == "version_num")
+                if getattr(version_column["type"], "length", 0) < 64:
+                    connection.exec_driver_sql("ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(64)")
+            connection.commit()
         context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():
             context.run_migrations()

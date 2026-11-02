@@ -67,7 +67,7 @@ def downgrade():
         op.drop_table("auth_accounts")
     constraints = sa.inspect(op.get_bind()).get_unique_constraints("runs")
     indexes = sa.inspect(op.get_bind()).get_indexes("runs")
-    if any(item["name"] == "uq_runs_tenant_actor_idempotency_key" for item in indexes):
+    if any(item["name"] == "uq_runs_tenant_actor_idempotency_key" and not item.get("duplicates_constraint") for item in indexes):
         op.drop_index("uq_runs_tenant_actor_idempotency_key", table_name="runs")
         op.create_index("uq_runs_actor_idempotency_key", "runs", ["actor_id", "idempotency_key"], unique=True)
     elif any(item["name"] == "uq_runs_tenant_actor_idempotency_key" for item in constraints):
@@ -75,7 +75,12 @@ def downgrade():
             batch.drop_constraint("uq_runs_tenant_actor_idempotency_key", type_="unique")
         op.create_index("uq_runs_actor_idempotency_key", "runs", ["actor_id", "idempotency_key"], unique=True)
     for table in reversed(TENANT_TABLES):
+        tenant_foreign_key = next((
+            foreign_key for foreign_key in sa.inspect(op.get_bind()).get_foreign_keys(table)
+            if foreign_key.get("referred_table") == "tenants" and "tenant_id" in foreign_key.get("constrained_columns", [])
+        ), None)
         with op.batch_alter_table(table) as batch:
-            batch.drop_constraint(f"fk_{table}_tenant_id_tenants", type_="foreignkey")
+            if tenant_foreign_key and tenant_foreign_key.get("name"):
+                batch.drop_constraint(tenant_foreign_key["name"], type_="foreignkey")
             batch.drop_column("tenant_id")
     op.drop_table("tenants")
