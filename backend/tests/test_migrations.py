@@ -4,6 +4,9 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
 
+from app.db.database import Base
+from app.db import models  # noqa: F401
+
 
 def test_legacy_sqlite_migrates_without_losing_rows(tmp_path, monkeypatch):
     database = tmp_path / "p0.sqlite"
@@ -26,14 +29,14 @@ def test_legacy_sqlite_migrates_without_losing_rows(tmp_path, monkeypatch):
         assert connection.scalar(text("SELECT source FROM policies WHERE id='p1'")) == "source-v1"
         assert connection.scalar(text("SELECT inquiry FROM runs WHERE id='r1'")) == "quote"
         assert "legacy" in connection.scalar(text("SELECT result FROM runs WHERE id='r1'"))
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0007_policy_action_scope"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0008_policy_audit"
         assert connection.scalar(text("SELECT action_type FROM policies WHERE id='p1'")) == "quote_discount"
         assert next(column for column in inspect(connection).get_columns("policies") if column["name"] == "max_discount_pct")["nullable"] is True
         assert "action_type" in {column["name"] for column in inspect(connection).get_columns("policy_drafts")}
         assert connection.scalar(text("SELECT attempt FROM runs WHERE id='r1'")) == 1
         assert connection.scalar(text("SELECT lease_expires_at FROM runs WHERE id='r1'")) is None
     tables = set(inspect(engine).get_table_names())
-    assert {"approval_requests", "policy_drafts"}.issubset(tables)
+    assert {"approval_requests", "policy_drafts", "policy_audit_events"}.issubset(tables)
     assert {column["name"] for column in inspect(engine).get_columns("runs")} >= {
         "duration_ms", "input_tokens", "output_tokens", "idempotency_key", "request_hash", "attempt", "lease_expires_at",
     }
@@ -48,4 +51,18 @@ def test_legacy_sqlite_migrates_without_losing_rows(tmp_path, monkeypatch):
     assert "tenants" not in inspect(engine).get_table_names()
     assert any(index["name"] == "uq_runs_actor_idempotency_key" and index["unique"] for index in inspect(engine).get_indexes("runs"))
     command.upgrade(config, "head")
+    engine.dispose()
+
+
+def test_fresh_metadata_database_can_be_stamped_and_upgraded(tmp_path):
+    database = tmp_path / "fresh.sqlite"
+    engine = create_engine(f"sqlite:///{database}")
+    Base.metadata.create_all(engine)
+    config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    config.set_main_option("sqlalchemy.url", f"sqlite:///{database.as_posix()}")
+    command.stamp(config, "0001_baseline")
+    command.upgrade(config, "head")
+    with engine.connect() as connection:
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0008_policy_audit"
+        assert "policy_audit_events" in inspect(connection).get_table_names()
     engine.dispose()

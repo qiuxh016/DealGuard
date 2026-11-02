@@ -12,6 +12,7 @@ from app.guards.business_rules import evaluate_quote
 from app.schemas.deal import ActionProposal, GuardDecision, InquiryIntent, MetricsResponse, PolicyDiffRequest, PolicyDiffResponse, PolicyDiffSide, PolicyDraftResponse, PolicyDraftUpdate
 from app.db.models import RunRecord
 from app.services.actors import get_current_actor
+from app.services.policy_audit import add_policy_audit_event
 from app.services.policies import activate_policy
 
 router = APIRouter(tags=["policy governance", "metrics"])
@@ -34,8 +35,10 @@ def get_metrics(actor: DemoActor = Depends(get_current_actor), db: Session = Dep
         input_tokens=sum(input_values) if input_values else None, output_tokens=sum(output_values) if output_values else None)
 
 
-def _admin(actor: DemoActor):
+def _admin(actor: DemoActor, db: Session, action: str, policy_id: str | None = None, version: str | None = None):
     if actor.role != "admin":
+        add_policy_audit_event(db, actor, action, "DENIED", "ADMIN_REQUIRED", policy_id, version)
+        db.commit()
         raise HTTPException(status_code=403, detail={"code": "ADMIN_REQUIRED", "message": "Only the demo admin can manage policy drafts."})
 
 
@@ -47,10 +50,17 @@ def _draft_response(row: PolicyDraft) -> PolicyDraftResponse:
         status=row.status, source=row.source)
 
 
+def _deny_policy_action(db: Session, actor: DemoActor, action: str, code: str, message: str,
+                       status_code: int = 409, policy_id: str | None = None, version: str | None = None):
+    add_policy_audit_event(db, actor, action, "DENIED", code, policy_id, version)
+    db.commit()
+    raise HTTPException(status_code=status_code, detail={"code": code, "message": message})
+
+
 @router.post("/policy-drafts", response_model=PolicyDraftResponse)
 async def upload_policy_draft(policy_id: str = Form(min_length=1, max_length=80), version: str = Form(min_length=1, max_length=40),
         file: UploadFile = File(...), actor: DemoActor = Depends(get_current_actor), db: Session = Depends(get_db)):
-    _admin(actor)
+    _admin(actor, db, "policy_draft_uploaded", policy_id, version)
     policy_id, version = policy_id.strip(), version.strip()
     if not policy_id or not version:
         raise HTTPException(status_code=422, detail={"code": "POLICY_ID_REQUIRED", "message": "Policy ID and version cannot be blank."})
@@ -67,6 +77,7 @@ async def upload_policy_draft(policy_id: str = Form(min_length=1, max_length=80)
         raise HTTPException(status_code=422, detail={"code": "INVALID_POLICY_ENCODING", "message": "Policy source must use UTF-8."}) from exc
     row = PolicyDraft(policy_id=policy_id.strip(), version=version.strip(), source=source, uploaded_by=actor.id, tenant_id=actor.tenant_id)
     db.add(row)
+    add_policy_audit_event(db, actor, "policy_draft_uploaded", "SUCCESS", policy_id=policy_id, version=version)
     db.commit()
     db.refresh(row)
     return _draft_response(row)
@@ -74,18 +85,19 @@ async def upload_policy_draft(policy_id: str = Form(min_length=1, max_length=80)
 
 @router.put("/policy-drafts/{draft_id}", response_model=PolicyDraftResponse)
 def edit_policy_draft(draft_id: str, body: PolicyDraftUpdate, actor: DemoActor = Depends(get_current_actor), db: Session = Depends(get_db)):
-    _admin(actor)
+    _admin(actor, db, "policy_draft_updated")
     row = db.scalar(select(PolicyDraft).where(PolicyDraft.id == draft_id, PolicyDraft.tenant_id == actor.tenant_id))
     if row is None:
-        raise HTTPException(status_code=404, detail={"code": "POLICY_DRAFT_NOT_FOUND", "message": "Policy draft not found."})
+        _deny_policy_action(db, actor, "policy_draft_updated", "POLICY_DRAFT_NOT_FOUND", "Policy draft not found.", 404)
     if row.status != "draft":
-        raise HTTPException(status_code=409, detail={"code": "POLICY_DRAFT_LOCKED", "message": "Activated drafts cannot be edited."})
+        _deny_policy_action(db, actor, "policy_draft_updated", "POLICY_DRAFT_LOCKED", "Activated drafts cannot be edited.", policy_id=row.policy_id, version=row.version)
     if body.exception_approval_allowed and (body.review_max_discount_pct is None or body.review_max_discount_pct <= body.max_discount_pct):
         raise HTTPException(status_code=422, detail={"code": "INVALID_REVIEW_LIMIT", "message": "Review limit must exceed the direct discount limit."})
     if not body.exception_approval_allowed and body.review_max_discount_pct is not None:
         raise HTTPException(status_code=422, detail={"code": "UNUSED_REVIEW_LIMIT", "message": "Set the review limit only when manager approval exceptions are enabled."})
     for field in ("title", "action_type", "customer_tier", "max_discount_pct", "review_max_discount_pct", "exception_approval_allowed"):
         setattr(row, field, getattr(body, field))
+    add_policy_audit_event(db, actor, "policy_draft_updated", "SUCCESS", policy_id=row.policy_id, version=row.version)
     db.commit()
     db.refresh(row)
     return _draft_response(row)
@@ -93,24 +105,24 @@ def edit_policy_draft(draft_id: str, body: PolicyDraftUpdate, actor: DemoActor =
 
 @router.post("/policy-drafts/{draft_id}/activate", response_model=PolicyDraftResponse)
 def activate_draft(draft_id: str, actor: DemoActor = Depends(get_current_actor), db: Session = Depends(get_db)):
-    _admin(actor)
+    _admin(actor, db, "policy_activation_attempt", policy_id=None, version=None)
     row = db.scalar(select(PolicyDraft).where(PolicyDraft.id == draft_id, PolicyDraft.tenant_id == actor.tenant_id))
     if row is None:
-        raise HTTPException(status_code=404, detail={"code": "POLICY_DRAFT_NOT_FOUND", "message": "Policy draft not found."})
+        _deny_policy_action(db, actor, "policy_draft_activated", "POLICY_DRAFT_NOT_FOUND", "Policy draft not found.", 404)
     if row.status == "active" and row.policy_row_id:
         return _draft_response(row)
     if row.action_type is None:
-        raise HTTPException(status_code=409, detail={"code": "POLICY_ACTION_REQUIRED", "message": "Confirm the policy action scope before activation."})
+        _deny_policy_action(db, actor, "policy_draft_activated", "POLICY_ACTION_REQUIRED", "Confirm the policy action scope before activation.", policy_id=row.policy_id, version=row.version)
     if row.action_type == "quote_discount" and row.max_discount_pct is None:
-        raise HTTPException(status_code=409, detail={"code": "POLICY_RULES_INCOMPLETE", "message": "Confirm structured discount rules before activation."})
+        _deny_policy_action(db, actor, "policy_draft_activated", "POLICY_RULES_INCOMPLETE", "Confirm structured discount rules before activation.", policy_id=row.policy_id, version=row.version)
     if row.action_type == "reference_only" and (row.max_discount_pct is not None or row.review_max_discount_pct is not None or row.exception_approval_allowed):
-        raise HTTPException(status_code=409, detail={"code": "POLICY_ACTION_MISMATCH", "message": "Reference-only policies cannot carry executable discount rules."})
+        _deny_policy_action(db, actor, "policy_draft_activated", "POLICY_ACTION_MISMATCH", "Reference-only policies cannot carry executable discount rules.", policy_id=row.policy_id, version=row.version)
     duplicate = db.scalar(select(Policy).where(Policy.tenant_id == actor.tenant_id, Policy.policy_id == row.policy_id, Policy.version == row.version))
     if duplicate:
-        raise HTTPException(status_code=409, detail={"code": "POLICY_VERSION_EXISTS", "message": "This policy ID and version already exist."})
+        _deny_policy_action(db, actor, "policy_draft_activated", "POLICY_VERSION_EXISTS", "This policy ID and version already exist.", policy_id=row.policy_id, version=row.version)
     siblings = db.scalars(select(Policy).where(Policy.tenant_id == actor.tenant_id, Policy.policy_id == row.policy_id)).all()
     if any(item.action_type != row.action_type for item in siblings):
-        raise HTTPException(status_code=409, detail={"code": "POLICY_ACTION_MISMATCH", "message": "Versions of one policy ID must share an action scope."})
+        _deny_policy_action(db, actor, "policy_draft_activated", "POLICY_ACTION_MISMATCH", "Versions of one policy ID must share an action scope.", policy_id=row.policy_id, version=row.version)
     policy = Policy(policy_id=row.policy_id, version=row.version, title=row.title, action_type=row.action_type, status="inactive",
         customer_tier=row.customer_tier, max_discount_pct=row.max_discount_pct,
         review_max_discount_pct=row.review_max_discount_pct, exception_approval_allowed=row.exception_approval_allowed,

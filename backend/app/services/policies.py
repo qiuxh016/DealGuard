@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import DemoActor, Policy
 from app.schemas.deal import PolicyResponse
+from app.services.policy_audit import add_policy_audit_event
 
 
 def list_policies(db: Session, tenant_id: str) -> list[PolicyResponse]:
@@ -24,9 +25,13 @@ def list_policies(db: Session, tenant_id: str) -> list[PolicyResponse]:
 
 def activate_policy(db: Session, actor: DemoActor, policy_row_id: str) -> PolicyResponse:
     if actor.role != "admin":
+        add_policy_audit_event(db, actor, "policy_activation_attempt", "DENIED", "ADMIN_REQUIRED")
+        db.commit()
         raise HTTPException(status_code=403, detail={"code": "ADMIN_REQUIRED", "message": "Only the demo admin can activate a policy."})
     selected = db.scalar(select(Policy).where(Policy.id == policy_row_id, Policy.tenant_id == actor.tenant_id))
     if selected is None:
+        add_policy_audit_event(db, actor, "policy_activation_attempt", "DENIED", "POLICY_NOT_FOUND")
+        db.commit()
         raise HTTPException(status_code=404, detail={"code": "POLICY_NOT_FOUND", "message": "Policy version not found."})
     now = datetime.now(timezone.utc)
     if selected.effective_from.replace(tzinfo=timezone.utc) > now:
@@ -36,6 +41,7 @@ def activate_policy(db: Session, actor: DemoActor, policy_row_id: str) -> Policy
         raise HTTPException(status_code=409, detail={"code": "POLICY_ACTION_MISMATCH", "message": "Versions of one policy ID must share an action scope."})
     for version in versions:
         version.status = "active" if version.id == selected.id else "inactive"
+    add_policy_audit_event(db, actor, "policy_activated", "SUCCESS", policy_id=selected.policy_id, version=selected.version)
     db.commit()
     db.refresh(selected)
     return PolicyResponse(

@@ -1,5 +1,7 @@
 from app.core.config import settings
-from app.db.models import AuthAccount, Policy, Tenant
+from datetime import datetime, timedelta, timezone
+
+from app.db.models import AuthAccount, AuthSession, Policy, Tenant
 from app.services.actors import hash_password
 
 
@@ -18,6 +20,38 @@ def test_login_cookie_session_and_logout(client, monkeypatch):
     assert client.post("/api/v1/policies/not-a-policy/activate", headers={"X-Demo-Actor": "admin"}).status_code == 403
     assert client.post("/api/v1/auth/logout").status_code == 200
     assert client.get("/api/v1/auth/me").status_code == 401
+
+
+def test_expired_or_disabled_account_session_is_rejected(client):
+    factory = client.app.state.session_factory
+    with factory() as db:
+        db.add(AuthAccount(actor_id="sales_a", password_hash=hash_password("a-long-demo-password")))
+        db.commit()
+    assert client.post("/api/v1/auth/login", json={"actor_id": "sales_a", "password": "a-long-demo-password"}).status_code == 200
+    with factory() as db:
+        session = db.query(AuthSession).one()
+        session.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+        db.commit()
+    assert client.get("/api/v1/auth/me").status_code == 401
+
+    assert client.post("/api/v1/auth/login", json={"actor_id": "sales_a", "password": "a-long-demo-password"}).status_code == 200
+    with factory() as db:
+        db.get(AuthAccount, "sales_a").is_active = False
+        db.commit()
+    response = client.get("/api/v1/auth/me")
+    assert response.status_code == 401
+    assert response.json()["detail"]["code"] == "SESSION_INVALID"
+
+
+def test_login_failure_does_not_disclose_unknown_account(client):
+    factory = client.app.state.session_factory
+    with factory() as db:
+        db.add(AuthAccount(actor_id="sales_a", password_hash=hash_password("a-long-demo-password")))
+        db.commit()
+    unknown = client.post("/api/v1/auth/login", json={"actor_id": "missing", "password": "incorrect"})
+    wrong_password = client.post("/api/v1/auth/login", json={"actor_id": "sales_a", "password": "incorrect"})
+    assert unknown.status_code == wrong_password.status_code == 401
+    assert unknown.json() == wrong_password.json()
 
 
 def test_production_rejects_demo_actor_header(client, monkeypatch):

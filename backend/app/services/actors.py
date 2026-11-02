@@ -65,7 +65,8 @@ def get_session_actor(request: Request, db: Session = Depends(get_db)) -> DemoAc
     if session is None or session.expires_at.replace(tzinfo=timezone.utc) <= datetime.now(timezone.utc):
         raise HTTPException(status_code=401, detail={"code": "SESSION_INVALID", "message": "Sign in again to continue."})
     actor = db.get(DemoActor, session.actor_id)
-    if actor is None:
+    account = db.get(AuthAccount, session.actor_id)
+    if actor is None or account is None or not account.is_active:
         raise HTTPException(status_code=401, detail={"code": "SESSION_INVALID", "message": "Sign in again to continue."})
     return actor
 
