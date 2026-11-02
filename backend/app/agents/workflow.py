@@ -41,7 +41,7 @@ def _event(step: str, status: str, message: str, details: dict[str, Any] | None 
 
 
 def _parse_demo_inquiry(raw: str) -> InquiryIntent:
-    quantity_match = re.search(r"(?<![-\d])([\d,]+)\s*(?:units?|items?|pieces?)\b", raw, re.IGNORECASE)
+    quantity_match = re.search(r"(?<![-\d])([\d,]+)\s*-?\s*(?:units?|items?|pieces?|products?)\b", raw, re.IGNORECASE)
     discount_match = re.search(r"(?<![-\d])(\d+(?:\.\d+)?)\s*%", raw)
     product_id = "P-100" if re.search(r"P-100|Product\s*A", raw, re.IGNORECASE) else None
     quantity = int(quantity_match.group(1).replace(",", "")) if quantity_match else None
@@ -158,6 +158,7 @@ def _retrieve_policy(state: DealGuardState) -> dict[str, Any]:
                 embeddings,
                 metadatas=[{"policy_row_id": row.id, "policy_id": row.policy_id, "version": row.version} for row in candidates],
                 collection_name=f"dealguard-policy-{uuid4().hex}",
+                collection_metadata={"hnsw:space": "cosine"},
             )
             try:
                 hits = index.similarity_search_with_relevance_scores(query, k=min(3, len(candidates)))

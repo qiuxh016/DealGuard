@@ -1,0 +1,59 @@
+{
+  "policies": [
+    {
+      "policy_id": "EVAL-BULK",
+      "version": "v1",
+      "title": "Volume purchase discount",
+      "action_type": "quote_discount",
+      "customer_tier": "VIP",
+      "max_discount_pct": "10",
+      "review_max_discount_pct": null,
+      "exception_approval_allowed": false,
+      "source": "For VIP bulk, wholesale and high-volume quantity orders, including qualified large purchases, case-lot orders and pallet orders, customers may receive up to a 10% quantity discount. The structured direct limit is 10%."
+    },
+    {
+      "policy_id": "EVAL-LOYALTY",
+      "version": "v1",
+      "title": "Repeat customer loyalty discount",
+      "action_type": "quote_discount",
+      "customer_tier": "VIP",
+      "max_discount_pct": "5",
+      "review_max_discount_pct": "8",
+      "exception_approval_allowed": true,
+      "source": "For returning VIP accounts with a long-standing customer relationship, loyalty rebates up to 5% may be granted directly. Repeat-buyer rewards, loyal member renewals and retention requests above 5% and up to 8% require manager review."
+    },
+    {
+      "policy_id": "EVAL-EARLYPAY",
+      "version": "v1",
+      "title": "Early payment concession",
+      "action_type": "quote_discount",
+      "customer_tier": "VIP",
+      "max_discount_pct": "7",
+      "review_max_discount_pct": null,
+      "exception_approval_allowed": false,
+      "source": "VIP customers who prepay, make an upfront or advance payment, pay cash, promptly settle the invoice or clear it within seven days may receive an early-payment concession up to 7%. The direct limit is 7%."
+    },
+    {
+      "policy_id": "EVAL-SEASON",
+      "version": "v1",
+      "title": "Seasonal campaign offer",
+      "action_type": "quote_discount",
+      "customer_tier": "VIP",
+      "max_discount_pct": "6",
+      "review_max_discount_pct": "9",
+      "exception_approval_allowed": true,
+      "source": "During approved seasonal, holiday, spring, summer, year-end, festive event or campaign offers, VIP customers may receive a 6% promotion directly. A seasonal offer above 6% and up to 9% requires manager review."
+    },
+    {
+      "policy_id": "EVAL-PRODUCT",
+      "version": "v1",
+      "title": "Product category promotion",
+      "action_type": "quote_discount",
+      "customer_tier": "VIP",
+      "max_discount_pct": "4",
+      "review_max_discount_pct": null,
+      "exception_approval_allowed": false,
+      "source": "Selected Product A catalog items in the designated product category, series, model, product line or product-specific range may receive a category promotion up to 4%. The direct product-specific discount limit is 4%."
+    }
+  ]
+}
