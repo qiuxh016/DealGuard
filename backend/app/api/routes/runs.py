@@ -1,0 +1,204 @@
+from datetime import datetime, timedelta, timezone
+from hashlib import sha256
+import logging
+from time import perf_counter, sleep
+from uuid import uuid4
+
+from fastapi import APIRouter, Depends, Header, HTTPException
+from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.orm import Session
+
+from app.agents.workflow import build_workflow
+from app.core.config import settings
+from app.db.database import get_db
+from app.db.models import ApprovalRequest, RunRecord
+from app.schemas.deal import ApprovalRequestResponse, InquiryRequest, RunResponse, TraceEvent
+from app.services.actors import get_current_actor
+from app.db.models import DemoActor
+
+router = APIRouter(prefix="/runs", tags=["runs"])
+logger = logging.getLogger(__name__)
+RUN_LEASE_SECONDS = 60
+
+
+def _replay_or_claim_run(db: Session, actor_id: str, key: str, request_hash: str) -> tuple[RunResponse | None, RunRecord | None]:
+    record = db.scalar(select(RunRecord).where(RunRecord.actor_id == actor_id, RunRecord.idempotency_key == key))
+    if record is None:
+        return None, None
+    if record.request_hash != request_hash:
+        raise HTTPException(status_code=409, detail={"code": "IDEMPOTENCY_KEY_REUSED", "message": "This idempotency key was already used for a different inquiry."})
+    if record.status != "running":
+        return RunResponse(run_id=record.id, **record.result), None
+
+    now = datetime.now(timezone.utc)
+    lease = record.lease_expires_at
+    if lease is not None and lease.tzinfo is None:
+        lease = lease.replace(tzinfo=timezone.utc)
+    if lease is not None and lease > now:
+        raise HTTPException(status_code=409, detail={"code": "IDEMPOTENCY_IN_PROGRESS", "message": "A request with this idempotency key is still running. Retry after it completes."})
+
+    lease_filter = RunRecord.lease_expires_at.is_(None) if record.lease_expires_at is None else RunRecord.lease_expires_at == record.lease_expires_at
+    claimed = None
+    for retry in range(40):
+        try:
+            claimed = db.execute(
+                update(RunRecord)
+                .where(
+                    RunRecord.id == record.id,
+                    RunRecord.status == "running",
+                    RunRecord.attempt == record.attempt,
+                    lease_filter,
+                )
+                .values(attempt=record.attempt + 1, lease_expires_at=now + timedelta(seconds=RUN_LEASE_SECONDS))
+                .execution_options(synchronize_session=False)
+            )
+            db.commit()
+            break
+        except OperationalError as error:
+            db.rollback()
+            if "locked" not in str(error).lower():
+                raise
+            if retry == 39:
+                raise HTTPException(status_code=409, detail={"code": "IDEMPOTENCY_IN_PROGRESS", "message": "Another request is recovering this inquiry."}) from error
+            sleep(0.05)
+    if claimed is None:
+        raise HTTPException(status_code=409, detail={"code": "IDEMPOTENCY_IN_PROGRESS", "message": "Another request is recovering this inquiry."})
+    if claimed.rowcount == 1:
+        db.expire(record)
+        db.refresh(record)
+        return None, record
+
+    db.rollback()
+    record = db.scalar(select(RunRecord).where(RunRecord.actor_id == actor_id, RunRecord.idempotency_key == key))
+    if record is not None and record.status != "running":
+        return RunResponse(run_id=record.id, **record.result), None
+    raise HTTPException(status_code=409, detail={"code": "IDEMPOTENCY_IN_PROGRESS", "message": "Another request claimed this inquiry for recovery."})
+
+
+@router.post("", response_model=RunResponse)
+def create_run(
+    body: InquiryRequest,
+    actor: DemoActor = Depends(get_current_actor),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key", max_length=128),
+    db: Session = Depends(get_db),
+) -> RunResponse:
+    request_hash = sha256(body.inquiry.encode("utf-8")).hexdigest()
+    if idempotency_key is not None:
+        idempotency_key = idempotency_key.strip()
+        if not idempotency_key:
+            raise HTTPException(status_code=422, detail={"code": "INVALID_IDEMPOTENCY_KEY", "message": "Idempotency-Key cannot be blank."})
+        replay, record = _replay_or_claim_run(db, actor.id, idempotency_key, request_hash)
+        if replay is not None:
+            return replay
+    else:
+        record = None
+
+    run_id = record.id if record is not None else str(uuid4())
+    started = perf_counter()
+    mode = "llm" if settings.llm_api_key and settings.llm_model else "demo"
+    if record is None:
+        lease_expires_at = datetime.now(timezone.utc) + timedelta(seconds=RUN_LEASE_SECONDS)
+        record = RunRecord(
+            id=run_id, actor_id=actor.id, tenant_id=actor.tenant_id, inquiry=body.inquiry, status="running", execution_mode=mode, result={},
+            idempotency_key=idempotency_key, request_hash=request_hash if idempotency_key is not None else None,
+            attempt=1, lease_expires_at=lease_expires_at,
+        )
+        db.add(record)
+        try:
+            db.commit()
+        except (IntegrityError, OperationalError) as error:
+            db.rollback()
+            if idempotency_key is None:
+                raise
+            replay, record = _replay_or_claim_run(db, actor.id, idempotency_key, request_hash)
+            if replay is not None:
+                return replay
+            if record is not None:
+                run_id = record.id
+            elif isinstance(error, OperationalError) and "locked" in str(error).lower():
+                raise HTTPException(status_code=409, detail={"code": "IDEMPOTENCY_IN_PROGRESS", "message": "Another request with this idempotency key is starting."}) from error
+            if record is None:
+                raise
+    run_attempt = record.attempt
+    initial = {
+        "run_id": run_id, "actor": actor, "session": db, "raw_inquiry": body.inquiry,
+        "execution_mode": mode, "events": [], "status": "completed",
+    }
+    try:
+        state = build_workflow().invoke(initial)
+        status = state.get("status", "completed")
+        response = RunResponse(
+            run_id=run_id, status=status, execution_mode=state.get("execution_mode", mode),
+            intent=state.get("intent"), decision=state.get("decision"), quote=state.get("quote"),
+            policy_evidence=state.get("evidence", []), trace=state.get("events", []),
+            input_tokens=state.get("usage", {}).get("input_tokens"),
+            output_tokens=state.get("usage", {}).get("output_tokens"),
+        )
+        if response.decision and response.decision.decision == "REVIEW" and state.get("proposal"):
+            proposal = state["proposal"]
+            approval = ApprovalRequest(
+                run_id=run_id, applicant_actor_id=actor.id, customer_id=proposal["customer_id"],
+                tenant_id=actor.tenant_id,
+                product_id=proposal["product_id"], quantity=proposal["quantity"],
+                discount_pct=proposal["requested_discount_pct"], policy_id=response.decision.policy_id,
+                policy_version=response.decision.policy_version, state="PENDING", reason=response.decision.reason_code,
+            )
+            db.add(approval)
+            db.flush()
+            response.approval_request = ApprovalRequestResponse.model_validate(approval, from_attributes=True)
+            response.trace.append(TraceEvent(
+                step="request_approval", status="pending", message="Saved a manager approval request; no quote was created.",
+                timestamp=datetime.now(timezone.utc), details={"approval_id": approval.id},
+            ))
+    except Exception:
+        logger.exception("DealGuard run %s failed", run_id)
+        db.rollback()
+        record = db.get(RunRecord, run_id)
+        event = TraceEvent(
+            step="workflow", status="failed",
+            message="The configured model or workflow failed; no quote was created.",
+            timestamp=datetime.now(timezone.utc), details={"reason_code": "WORKFLOW_FAILED"},
+        )
+        response = RunResponse(
+            run_id=run_id, status="failed", execution_mode=mode,
+            decision={"decision": "DENY", "reason_code": "WORKFLOW_FAILED", "human_message": event.message},
+            trace=[event],
+        )
+    response.duration_ms = round((perf_counter() - started) * 1000)
+    if response.trace:
+        response.trace[-1].details.setdefault("end_to_end_duration_ms", response.duration_ms)
+    finalized = db.execute(
+        update(RunRecord)
+        .where(RunRecord.id == run_id, RunRecord.status == "running", RunRecord.attempt == run_attempt)
+        .values(
+            duration_ms=response.duration_ms,
+            input_tokens=response.input_tokens,
+            output_tokens=response.output_tokens,
+            status=response.status,
+            execution_mode=response.execution_mode,
+            result=response.model_dump(mode="json", exclude={"run_id"}),
+            lease_expires_at=None,
+        )
+        .execution_options(synchronize_session=False)
+    )
+    if finalized.rowcount != 1:
+        db.rollback()
+        current = db.get(RunRecord, run_id)
+        if current is not None and current.status != "running":
+            return RunResponse(run_id=current.id, **current.result)
+        raise HTTPException(status_code=409, detail={"code": "RUN_ATTEMPT_SUPERSEDED", "message": "A newer attempt claimed this run; retry with the same idempotency key."})
+    db.commit()
+    return response
+
+
+@router.get("/{run_id}", response_model=RunResponse)
+def get_run(
+    run_id: str,
+    actor: DemoActor = Depends(get_current_actor),
+    db: Session = Depends(get_db),
+) -> RunResponse:
+    record = db.scalar(select(RunRecord).where(RunRecord.id == run_id, RunRecord.tenant_id == actor.tenant_id))
+    if record is None or (record.actor_id != actor.id and actor.role != "admin"):
+        raise HTTPException(status_code=404, detail={"code": "RUN_NOT_FOUND", "message": "Run not found."})
+    return RunResponse(run_id=record.id, **record.result)
