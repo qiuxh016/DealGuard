@@ -1,0 +1,9 @@
+{"case_id":"discount_concession","query":"Can we offer the buyer a price concession?","expected_policy_id":"DISCOUNT-TEST","expected_version":"v1"}
+{"case_id":"discount_rebate","query":"The customer asks for a rebate on the unit price.","expected_policy_id":"DISCOUNT-TEST","expected_version":"v1"}
+{"case_id":"discount_promotion","query":"What promotion or price reduction may a VIP receive?","expected_policy_id":"DISCOUNT-TEST","expected_version":"v1"}
+{"case_id":"returns_defect","query":"The delivered item is defective; can the buyer request reimbursement?","expected_policy_id":"RETURNS-TEST","expected_version":"v1"}
+{"case_id":"returns_damaged","query":"Can a customer return damaged goods and receive a refund?","expected_policy_id":"RETURNS-TEST","expected_version":"v1"}
+{"case_id":"returns_replacement","query":"What is the replacement process for a faulty product?","expected_policy_id":"RETURNS-TEST","expected_version":"v1"}
+{"case_id":"shipping_freight","query":"Who pays freight charges for delivery?","expected_policy_id":"SHIPPING-TEST","expected_version":"v1"}
+{"case_id":"shipping_transport","query":"Are transport costs included with shipment?","expected_policy_id":"SHIPPING-TEST","expected_version":"v1"}
+{"case_id":"shipping_export","query":"What export shipping and delivery fees apply?","expected_policy_id":"SHIPPING-TEST","expected_version":"v1"}

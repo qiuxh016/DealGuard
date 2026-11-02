@@ -3,6 +3,7 @@ import time
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, TypedDict
+from uuid import uuid4
 
 from langgraph.graph import END, START, StateGraph
 from sqlalchemy import select
@@ -143,21 +144,28 @@ def _retrieve_policy(state: DealGuardState) -> dict[str, Any]:
                 model=settings.embedding_model, api_key=settings.llm_api_key,
                 base_url=settings.llm_base_url or None,
             )
+            # Keep policy documents isolated between concurrent and sequential inquiries.
             index = Chroma.from_texts(
                 [row.source for row in candidates],
                 embeddings,
                 metadatas=[{"policy_row_id": row.id, "policy_id": row.policy_id, "version": row.version} for row in candidates],
+                collection_name=f"dealguard-policy-{uuid4().hex}",
             )
-            hits = index.similarity_search_with_relevance_scores(query, k=min(3, len(candidates)))
-            hit_id = hits[0][0].metadata.get("policy_row_id") if hits else candidates[0].id
-            policy = next((row for row in candidates if row.id == hit_id), candidates[0])
+            try:
+                hits = index.similarity_search_with_relevance_scores(query, k=min(3, len(candidates)))
+                if hits:
+                    hit_id = hits[0][0].metadata.get("policy_row_id")
+                    policy = next((row for row in candidates if row.id == hit_id), None)
+            finally:
+                index.delete_collection()
             mode = "chroma"
         else:
             policy = candidates[0]
-        evidence = [PolicyEvidence(
-            policy_id=policy.policy_id, version=policy.version, title=policy.title,
-            citation=policy.source, source=f"{policy.policy_id}@{policy.version}", retrieval_mode=mode,
-        )]
+        if policy is not None:
+            evidence = [PolicyEvidence(
+                policy_id=policy.policy_id, version=policy.version, title=policy.title,
+                citation=policy.source, source=f"{policy.policy_id}@{policy.version}", retrieval_mode=mode,
+            )]
     event = _event(
         "retrieve_policy", "completed" if policy else "no_policy",
         "Retrieved evidence from the active, effective policy set." if policy else "No active effective policy applies; execution will fail closed.",
