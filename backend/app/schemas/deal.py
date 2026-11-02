@@ -31,7 +31,7 @@ class PolicyEvidence(BaseModel):
     title: str
     citation: str
     source: str
-    retrieval_mode: Literal["chroma", "demo"]
+    retrieval_mode: Literal["chroma", "demo", "registry"]
 
 
 class GuardDecision(BaseModel):

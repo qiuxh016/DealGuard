@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier, Event
 
+import pytest
 from sqlalchemy import func, select
 
 from app.db.models import ApprovalRequest, Customer, Policy, Product, QuoteDraft, RunRecord
@@ -289,28 +290,18 @@ def test_expired_active_policy_is_not_retrieved(client):
     assert count_quotes(client) == 0
 
 
-def test_chroma_retrieval_uses_filtered_active_policy(client, monkeypatch):
+def test_single_policy_candidate_uses_registry_without_embedding(client, monkeypatch):
     from app.agents import workflow
     from app.core.config import settings
 
-    class FakeEmbeddings:
-        def __init__(self, **_kwargs):
-            pass
-
-        def embed_documents(self, texts):
-            return [[float(len(texts)), 1.0, 0.0] for _ in texts]
-
-        def embed_query(self, _text):
-            return [1.0, 1.0, 0.0]
-
-    monkeypatch.setattr(settings, "llm_api_key", "test-key")
+    monkeypatch.setattr(settings, "llm_api_key", "configured-test-key")
     monkeypatch.setattr(settings, "embedding_model", "test-embedding")
-    monkeypatch.setattr("langchain_openai.OpenAIEmbeddings", FakeEmbeddings)
+    monkeypatch.setattr("langchain_openai.OpenAIEmbeddings", lambda **_kwargs: pytest.fail("Embedding must not run for one candidate"))
     with client.app.state.session_factory() as db:
         customer = db.get(Customer, "C-001")
         result = workflow._retrieve_policy({"session": db, "customer": customer, "raw_inquiry": "VIP discount policy", "events": []})
     assert result["evidence"][0]["source"] == "DISCOUNT-01@v1"
-    assert result["evidence"][0]["retrieval_mode"] == "chroma"
+    assert result["evidence"][0]["retrieval_mode"] == "registry"
 
 
 def test_run_history_is_scoped_to_actor(client):

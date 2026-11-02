@@ -136,7 +136,10 @@ def _retrieve_policy(state: DealGuardState) -> dict[str, Any]:
     mode = "demo"
     if candidates:
         query = state["raw_inquiry"]
-        if settings.llm_api_key and settings.embedding_model:
+        if len(candidates) == 1:
+            policy = candidates[0]
+            mode = "registry"
+        elif settings.llm_api_key and settings.embedding_model:
             from langchain_chroma import Chroma
             from langchain_openai import OpenAIEmbeddings
 
@@ -159,8 +162,6 @@ def _retrieve_policy(state: DealGuardState) -> dict[str, Any]:
             finally:
                 index.delete_collection()
             mode = "chroma"
-        else:
-            policy = candidates[0]
         if policy is not None:
             evidence = [PolicyEvidence(
                 policy_id=policy.policy_id, version=policy.version, title=policy.title,
