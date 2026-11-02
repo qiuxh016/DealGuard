@@ -1,4 +1,6 @@
 import json
+import math
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -18,6 +20,11 @@ TOPIC_TERMS = (
     ("return", "refund", "reimbursement", "defective", "damaged", "replacement", "faulty"),
     ("freight", "delivery", "shipment", "transport", "shipping", "export"),
 )
+POLICY_DOCUMENTS = {
+    "DISCOUNT-TEST": "Discount and rebate price concession promotion reduction terms.",
+    "RETURNS-TEST": "Return refund reimbursement for defective damaged faulty goods and replacement terms.",
+    "SHIPPING-TEST": "Freight delivery shipment transport shipping and export fee terms.",
+}
 
 
 class DeterministicTopicEmbeddings:
@@ -66,9 +73,9 @@ def retrieval_corpus(client, monkeypatch):
             Customer(id="C-RETRIEVAL", name="Retrieval Evaluation Customer", tier="VIP", tenant_id=tenant_id),
         ])
         db.add_all([
-            _policy("DISCOUNT-TEST", "Discount terms", "Discount and rebate price concession promotion reduction terms.", tenant_id=tenant_id),
-            _policy("RETURNS-TEST", "Returns and refunds", "Return refund reimbursement for defective damaged faulty goods and replacement terms.", tenant_id=tenant_id),
-            _policy("SHIPPING-TEST", "Shipping charges", "Freight delivery shipment transport shipping and export fee terms.", tenant_id=tenant_id),
+            _policy("DISCOUNT-TEST", "Discount terms", POLICY_DOCUMENTS["DISCOUNT-TEST"], tenant_id=tenant_id),
+            _policy("RETURNS-TEST", "Returns and refunds", POLICY_DOCUMENTS["RETURNS-TEST"], tenant_id=tenant_id),
+            _policy("SHIPPING-TEST", "Shipping charges", POLICY_DOCUMENTS["SHIPPING-TEST"], tenant_id=tenant_id),
             _policy("INACTIVE-TEST", "Inactive returns policy", "Return refund reimbursement defective goods terms.", tenant_id=tenant_id, status="inactive"),
             _policy("EXPIRED-TEST", "Expired freight policy", "Freight delivery shipment transport terms.", tenant_id=tenant_id, effective_to=now - timedelta(seconds=1)),
             _policy("OTHER-TENANT-TEST", "Other tenant discount policy", "Discount rebate price concession terms.", tenant_id="other-tenant"),
@@ -139,3 +146,70 @@ def test_retrieval_fails_closed_when_index_returns_no_hit(retrieval_corpus, monk
     assert result["policy"] is None
     assert result["evidence"] == []
     assert result["events"][-1]["status"] == "no_policy"
+
+
+def _tokens(text: str) -> list[str]:
+    return re.findall(r"[a-z]+", text.lower())
+
+
+def _bm25_rank(query: str) -> list[str]:
+    documents = {policy_id: _tokens(source) for policy_id, source in POLICY_DOCUMENTS.items()}
+    query_terms = set(_tokens(query))
+    average_length = sum(map(len, documents.values())) / len(documents)
+    scores: dict[str, float] = {}
+    for policy_id, document in documents.items():
+        score = 0.0
+        for term in query_terms:
+            frequency = document.count(term)
+            if frequency == 0:
+                continue
+            document_frequency = sum(term in other for other in documents.values())
+            inverse_frequency = math.log(1 + (len(documents) - document_frequency + 0.5) / (document_frequency + 0.5))
+            score += inverse_frequency * frequency * 2.5 / (
+                frequency + 1.5 * (1 - 0.75 + 0.75 * len(document) / average_length)
+            )
+        scores[policy_id] = score
+    return sorted(scores, key=lambda policy_id: (-scores[policy_id], policy_id))
+
+
+def _dense_rank(query: str) -> list[str]:
+    query_vector = DeterministicTopicEmbeddings._vector(query)
+    scores = {}
+    for policy_id, source in POLICY_DOCUMENTS.items():
+        document_vector = DeterministicTopicEmbeddings._vector(source)
+        scores[policy_id] = sum(left * right for left, right in zip(query_vector, document_vector))
+    return sorted(scores, key=lambda policy_id: (-scores[policy_id], policy_id))
+
+
+def _rrf_rank(rankings: list[list[str]], k: int = 60) -> list[str]:
+    scores: dict[str, float] = {}
+    for ranking in rankings:
+        for rank, policy_id in enumerate(ranking, start=1):
+            scores[policy_id] = scores.get(policy_id, 0) + 1 / (k + rank)
+    return sorted(scores, key=lambda policy_id: (-scores[policy_id], policy_id))
+
+
+def _retrieval_metrics(rankings: list[list[list[str]]]) -> dict[str, float]:
+    reciprocal_ranks = [1 / next((rank for rank, item in enumerate(ranking, start=1) if item == expected), 10**6)
+                        for ranking, expected in zip(rankings, (case["expected_policy_id"] for case in CASES))]
+    return {
+        "hit_at_1": sum(rank == 1 for rank in reciprocal_ranks) / len(CASES),
+        "mrr": sum(reciprocal_ranks) / len(CASES),
+    }
+
+
+def test_offline_bm25_dense_and_rrf_comparison():
+    bm25_rankings = [_bm25_rank(case["query"]) for case in CASES]
+    dense_rankings = [_dense_rank(case["query"]) for case in CASES]
+    fused_rankings = [
+        _rrf_rank([bm25, dense]) for bm25, dense in zip(bm25_rankings, dense_rankings)
+    ]
+    metrics = {
+        "BM25": _retrieval_metrics(bm25_rankings),
+        "deterministic_dense_test_adapter": _retrieval_metrics(dense_rankings),
+        "RRF": _retrieval_metrics(fused_rankings),
+    }
+    print(json.dumps({"cases": len(CASES), "offline_mock_only": True, "metrics": metrics}, sort_keys=True))
+
+    expected_metrics = {"hit_at_1": 1.0, "mrr": 1.0}
+    assert metrics == {name: expected_metrics for name in ("BM25", "deterministic_dense_test_adapter", "RRF")}
