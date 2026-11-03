@@ -59,7 +59,7 @@ def evaluate_quote_with_trace(
     if policy is not None and not record("policy_scope", policy_scope_applies(policy, policy_scope, product)):
         return GuardDecision(decision="DENY", reason_code="POLICY_SCOPE_MISMATCH", policy_id=policy.policy_id, policy_version=policy.version,
                              human_message="The selected policy scope does not apply to this inquiry and product."), None, checks
-    if not record("customer_tier", customer.tier == "VIP" and (policy is None or customer.tier == policy.customer_tier)) or policy is None:
+    if not record("customer_tier", policy is not None and customer.tier == policy.customer_tier) or policy is None:
         return GuardDecision(decision="DENY", reason_code="NO_APPLICABLE_POLICY", human_message="No active discount policy applies to this verified customer tier."), None, checks
     if not record("policy_rule_complete", policy.max_discount_pct is not None):
         return GuardDecision(decision="DENY", reason_code="POLICY_RULES_INCOMPLETE", policy_id=policy.policy_id, policy_version=policy.version,

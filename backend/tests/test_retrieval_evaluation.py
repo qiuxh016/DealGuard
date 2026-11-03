@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from app.core.config import settings
 from app.db.models import Customer, Policy, Tenant
 
 
@@ -153,6 +154,58 @@ def test_retrieval_fails_closed_when_bm25_finds_no_evidence(retrieval_corpus, mo
     assert result["evidence"] == []
     assert result["evidence_low_relevance"] is True
     assert result["events"][-1]["status"] == "low_relevance"
+
+
+def test_hybrid_retrieval_selects_policy_only_when_dense_and_bm25_agree(retrieval_corpus, monkeypatch):
+    workflow, db, customer = retrieval_corpus
+    monkeypatch.setattr(settings, "local_embedding_model_path", "test-model")
+
+    class TestEmbeddings(DeterministicTopicEmbeddings):
+        def __init__(self, _path):
+            pass
+
+    monkeypatch.setattr("app.rag.embeddings.LocalPolicyEmbeddings", TestEmbeddings)
+
+    result = workflow._retrieve_policy({
+        "session": db,
+        "customer": customer,
+        "raw_inquiry": "Can we provide a discount rebate?",
+        "events": [],
+    })
+
+    assert result["policy"].policy_id == "DISCOUNT-TEST"
+    assert result["evidence"][0]["retrieval_mode"] == "chroma_local_consensus"
+    assert result["evidence"][0]["citation"] in result["policy"].source
+    details = result["events"][-1]["details"]
+    assert details["bm25_top_policy_id"] == details["dense_top_policy_id"] == "DISCOUNT-TEST"
+
+
+def test_hybrid_retrieval_abstains_when_dense_and_bm25_disagree(retrieval_corpus, monkeypatch):
+    workflow, db, customer = retrieval_corpus
+    monkeypatch.setattr(settings, "local_embedding_model_path", "test-model")
+
+    class DisagreeingEmbeddings:
+        def __init__(self, _path):
+            pass
+
+        def embed_documents(self, texts):
+            return [[0.1] if "Discount" in text else [1.0] for text in texts]
+
+        def embed_query(self, _query):
+            return [1.0]
+
+    monkeypatch.setattr("app.rag.embeddings.LocalPolicyEmbeddings", DisagreeingEmbeddings)
+    result = workflow._retrieve_policy({
+        "session": db,
+        "customer": customer,
+        "raw_inquiry": "Can we provide a discount rebate?",
+        "events": [],
+    })
+
+    assert result["policy"] is None
+    assert result["evidence"] == []
+    assert result["retrieval_ambiguous"] is True
+    assert result["events"][-1]["details"]["abstain_reason"] == "POLICY_RETRIEVAL_AMBIGUOUS"
 
 
 def _tokens(text: str) -> list[str]:

@@ -181,6 +181,7 @@ def create_run(
         "run_id": run_id, "actor": actor, "session": db, "raw_inquiry": body.inquiry, "customer_id": customer_id,
         "execution_mode": mode, "events": [], "status": "completed",
     }
+    state = {}
     try:
         state = build_workflow().invoke(initial)
         status = state.get("status", "completed")
@@ -236,6 +237,48 @@ def create_run(
     response.duration_ms = round((perf_counter() - started) * 1000)
     if response.trace:
         response.trace[-1].details.setdefault("end_to_end_duration_ms", response.duration_ms)
+    stored_result = response.model_dump(mode="json", exclude={"run_id"})
+    if state.get("proposal") and state.get("customer"):
+        customer = state["customer"]
+        actor_snapshot = state["actor"]
+        line_rows = state.get("line_results") or [{
+            "proposal": state["proposal"],
+            "product_name": getattr(state.get("product"), "name", None),
+            "currency": getattr(state.get("product"), "currency", None),
+            "unit_price": str(getattr(state.get("product"), "unit_price", "")),
+            "available_stock": getattr(state.get("product"), "stock", None),
+        }]
+        policy = state.get("policy")
+        stored_result["_impact_snapshot"] = {
+            "actor": {"id": actor_snapshot.id, "role": actor_snapshot.role, "customer_id": actor_snapshot.customer_id},
+            "customer": {"id": customer.id, "tier": customer.tier},
+            "tenant_id": actor_snapshot.tenant_id,
+            "policy_scope": (state.get("intent") or {}).get("policy_scope") or "general",
+            "lines": [
+                {
+                    "proposal": row.get("proposal"),
+                    "product": {
+                        "id": (row.get("proposal") or {}).get("product_id"),
+                        "name": row.get("product_name"),
+                        "currency": row.get("currency"),
+                        "unit_price": row.get("unit_price"),
+                        "stock": row.get("available_stock"),
+                    },
+                }
+                for row in line_rows
+            ],
+            "policy": ({
+                "policy_id": policy.policy_id, "version": policy.version, "title": policy.title,
+                "action_type": policy.action_type, "policy_scope": policy.policy_scope,
+                "scope_product_id": policy.scope_product_id, "customer_tier": policy.customer_tier,
+                "max_discount_pct": str(policy.max_discount_pct) if policy.max_discount_pct is not None else None,
+                "review_max_discount_pct": str(policy.review_max_discount_pct) if policy.review_max_discount_pct is not None else None,
+                "exception_approval_allowed": policy.exception_approval_allowed,
+                "effective_from": policy.effective_from.isoformat(),
+                "effective_to": policy.effective_to.isoformat() if policy.effective_to else None,
+                "source": policy.source,
+            } if policy else None),
+        }
     finalized = db.execute(
         update(RunRecord)
         .where(RunRecord.id == run_id, RunRecord.status == "running", RunRecord.attempt == run_attempt)
@@ -245,7 +288,7 @@ def create_run(
             output_tokens=response.output_tokens,
             status=response.status,
             execution_mode=response.execution_mode,
-            result=response.model_dump(mode="json", exclude={"run_id"}),
+            result=stored_result,
             lease_expires_at=None,
         )
         .execution_options(synchronize_session=False)

@@ -95,6 +95,10 @@ def _seed_eval_policies(session_factory, policies: list[dict]) -> None:
                 exception_approval_allowed=item["exception_approval_allowed"],
                 effective_from=now - timedelta(days=1), source=item["source"], tenant_id="harborlight-demo",
             ))
+        alternate = next(
+            item for item in json.loads((ROOT / "data" / "policy_rag_safety" / "policies.json").read_text(encoding="utf-8"))["policies"]
+            if item["policy_id"] == "EVAL-BULK-ALT"
+        )
         db.add_all([
             Policy(policy_id="EVAL-REFERENCE", version="v1", title="Reference only", action_type="reference_only",
                    status="active", customer_tier="VIP", max_discount_pct=None, exception_approval_allowed=False,
@@ -112,6 +116,12 @@ def _seed_eval_policies(session_factory, policies: list[dict]) -> None:
             Policy(policy_id="EVAL-BULK-CONFLICT", version="v1", title="Conflicting bulk limit", action_type="quote_discount",
                    status="inactive", customer_tier="VIP", policy_scope="bulk_order", max_discount_pct=Decimal("4"), exception_approval_allowed=False,
                    effective_from=now - timedelta(days=1), source="A conflicting structured direct discount limit is 4%.", tenant_id="harborlight-demo"),
+            Policy(policy_id=alternate["policy_id"], version=alternate["version"], title=alternate["title"],
+                   action_type=alternate["action_type"], status="inactive", customer_tier=alternate["customer_tier"],
+                   policy_scope=alternate["policy_scope"], scope_product_id=alternate.get("scope_product_id"),
+                   max_discount_pct=Decimal(alternate["max_discount_pct"]),
+                   exception_approval_allowed=alternate["exception_approval_allowed"],
+                   effective_from=now - timedelta(days=1), source=alternate["source"], tenant_id="harborlight-demo"),
         ])
         db.commit()
 
@@ -126,6 +136,7 @@ def replay(dataset: str, model_path: str, split: str) -> dict:
     if split != "all":
         cases = [case for case in cases if case["split"] == split]
     settings.app_env = "development"
+    settings.enable_demo_auth = True
     settings.llm_model = ""
     settings.local_embedding_model_path = model_path
 
@@ -259,7 +270,7 @@ def replay(dataset: str, model_path: str, split: str) -> dict:
     return {
         "dataset": dataset, "dataset_sha256": dataset_hash,
         "guard_expectations_sha256": expectations_hash, "split": split, "model": Path(model_path).name,
-        "runtime": "FastAPI TestClient + isolated SQLite + Registry policy filtering + deterministic Guard; Qwen3 path configured, but per-case retrieval_mode records whether embeddings were invoked",
+        "runtime": "FastAPI TestClient + isolated SQLite + Registry filtering + local Qwen3/BM25 consensus retrieval + deterministic Guard",
         "retrieval_modes": dict(Counter(row["retrieval_mode"] for row in rows)),
         "cases": len(rows), "metrics_by_split": split_metrics,
         "totals": {

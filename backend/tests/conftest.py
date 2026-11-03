@@ -24,6 +24,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "enable_demo_auth", True)
     monkeypatch.setattr(settings, "llm_api_key", "")
     monkeypatch.setattr(settings, "llm_model", "")
+    monkeypatch.setattr(settings, "local_embedding_model_path", "")
     engine = create_engine(URL.create("sqlite", database=str(tmp_path / "test.sqlite")), connect_args={"check_same_thread": False})
 
     @event.listens_for(engine, "connect")

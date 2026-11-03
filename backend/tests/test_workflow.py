@@ -282,6 +282,31 @@ def test_untrusted_vip_claim_does_not_change_standard_customer_tier(client):
     assert count_quotes(client) == 0
 
 
+def test_standard_customer_can_quote_under_matching_policy(client):
+    from app.db.models import Policy
+
+    with client.app.state.session_factory() as db:
+        db.add(Policy(
+            policy_id="STANDARD-DISCOUNT", version="v1", title="Standard customer discount",
+            action_type="quote_discount", policy_scope="general", status="active", customer_tier="Standard",
+            max_discount_pct=Decimal("5"), exception_approval_allowed=False,
+            effective_from=datetime.now(timezone.utc), source="Standard customers may receive a discount up to 5 percent.",
+            tenant_id="harborlight-demo",
+        ))
+        db.commit()
+
+    result = client.post(
+        "/api/v1/runs",
+        headers={"X-Demo-Actor": "sales_b"},
+        json={"inquiry": "Quote 100 units of Product A with a 5% discount."},
+    ).json()
+
+    assert result["decision"]["decision"] == "ALLOW", result
+    assert result["decision"]["policy_id"] == "STANDARD-DISCOUNT"
+    assert result["quote"]["breakdown"]["total"] == "9500.00"
+    assert count_quotes(client) == 1
+
+
 def test_insufficient_stock_and_missing_fields_never_write(client):
     too_many = client.post("/api/v1/runs", json={"inquiry": "Quote 2,001 units of Product A at 5% discount."}).json()
     assert too_many["decision"]["reason_code"] == "INSUFFICIENT_STOCK"

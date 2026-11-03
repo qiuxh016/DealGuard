@@ -253,6 +253,38 @@ class PolicyDiffResponse(BaseModel):
     compare: PolicyDiffSide
 
 
+class PolicyImpactRequest(BaseModel):
+    policy_draft_id: str = Field(min_length=1, max_length=80)
+    run_ids: list[str] | None = Field(default=None, max_length=50)
+    mode: Literal["frozen_intent_replay", "end_to_end_replay"] = "frozen_intent_replay"
+
+
+class PolicyImpactCase(BaseModel):
+    run_id: str
+    status: Literal["replayed", "skipped", "failed"]
+    baseline_decision: str | None = None
+    candidate_decision: str | None = None
+    baseline_reason_code: str | None = None
+    candidate_reason_code: str | None = None
+    changed: bool | None = None
+    skip_reason: str | None = None
+    details: dict = Field(default_factory=dict)
+
+
+class PolicyImpactReport(BaseModel):
+    mode: Literal["frozen_intent_replay", "end_to_end_replay"]
+    policy_id: str
+    candidate_version: str
+    total_cases: int
+    replayed_cases: int
+    skipped_cases: int
+    changed_cases: int
+    change_rate: Decimal | None
+    transitions: dict[str, int]
+    cases: list[PolicyImpactCase]
+    writes_created: Literal[False] = False
+
+
 class MetricsResponse(BaseModel):
     run_count: int
     allow_count: int

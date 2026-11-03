@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
 from app.rag.evaluation import _bm25_rank  # noqa: E402
+from app.rag.embeddings import LocalPolicyEmbeddings  # noqa: E402
 from app.rag.policy_chunks import policy_clauses  # noqa: E402
 from app.rag.policy_graph import policy_conflict_graph  # noqa: E402
 
@@ -167,10 +168,8 @@ def evaluate(cases: list[dict], base_policies: list[dict], embedding_model: str 
     document_embedding_seconds = None
     dense_vectors: dict[str, list[list[float]]] = {}
     if embedding_model:
-        from app.agents.workflow import _LocalPolicyEmbeddings
-
         model_started = perf_counter()
-        embeddings = _LocalPolicyEmbeddings(embedding_model)
+        embeddings = LocalPolicyEmbeddings(embedding_model)
         model_load_seconds = round(perf_counter() - model_started, 3)
         document_started = perf_counter()
         for policy in base_policies:

@@ -51,6 +51,7 @@ class DealGuardState(TypedDict, total=False):
     product: Product | None
     products: list[Product]
     policy: Policy | None
+    policy_override: Policy | None
     evidence: list[dict[str, Any]]
     retrieval_ambiguous: bool
     evidence_low_relevance: bool
@@ -285,6 +286,11 @@ def _retrieve_policy(state: DealGuardState) -> dict[str, Any]:
         now = datetime.now(timezone.utc)
         from app.services.policies import current_quote_policies
         all_candidates = current_quote_policies(db, customer.tenant_id, customer.tier, now=now)
+        override = state.get("policy_override")
+        if override is not None and override.tenant_id == customer.tenant_id and override.customer_tier == customer.tier:
+            all_candidates = [row for row in all_candidates if row.policy_id != override.policy_id]
+            if override.action_type == "quote_discount":
+                all_candidates.append(override)
     intent = InquiryIntent.model_validate(state.get("intent") or _parse_demo_inquiry(state["raw_inquiry"]).model_dump(mode="json"))
     scope_ambiguous = intent.policy_scope is None
     candidates = []
@@ -310,6 +316,8 @@ def _retrieve_policy(state: DealGuardState) -> dict[str, Any]:
     mode = "demo"
     retrieval_ambiguous = False
     evidence_low_relevance = False
+    embedding_error = False
+    retrieval_diagnostics: dict[str, Any] = {}
     if candidates:
         query = state["raw_inquiry"]
         from app.rag.policy_chunks import policy_clauses
@@ -339,12 +347,88 @@ def _retrieve_policy(state: DealGuardState) -> dict[str, Any]:
             else:
                 policy = candidates[0]
                 mode = "registry"
-                selected_clause = clause_by_id[ranked_clauses[0]][1]
+                if settings.local_embedding_model_path:
+                    try:
+                        from app.rag.embeddings import LocalPolicyEmbeddings
+                        from app.rag.evaluation import _rrf_rank
+
+                        embeddings = LocalPolicyEmbeddings(settings.local_embedding_model_path)
+                        document_vectors = embeddings.embed_documents([clause_sources[key] for key in clause_ids])
+                        query_vector = embeddings.embed_query(query)
+                        dense_scores = {
+                            key: sum(a * b for a, b in zip(query_vector, vector, strict=True))
+                            for key, vector in zip(clause_ids, document_vectors, strict=True)
+                        }
+                        dense_order = sorted(clause_ids, key=lambda key: (-dense_scores[key], key))
+                        fused = _rrf_rank([ranked_clauses, dense_order])
+                        selected_clause = clause_by_id[fused[0]][1]
+                        mode = "chroma_local"
+                    except Exception:
+                        embedding_error = True
+                        selected_clause = clause_by_id[ranked_clauses[0]][1]
+                else:
+                    selected_clause = clause_by_id[ranked_clauses[0]][1]
         else:
-            # Registry remains the sole authorization source. Never use a vector
-            # model to select between multiple otherwise eligible policies.
-            retrieval_ambiguous = True
-            mode = "registry_abstain"
+            # Candidate eligibility is already fixed by Registry metadata. Hybrid
+            # ranking may select evidence, but only BM25/Dense agreement may pick
+            # a policy; Guard still authorizes from structured policy fields.
+            if not settings.local_embedding_model_path:
+                retrieval_ambiguous = True
+                mode = "registry_abstain"
+                retrieval_diagnostics["abstain_reason"] = "LOCAL_EMBEDDING_NOT_CONFIGURED"
+            else:
+                try:
+                    from app.rag.embeddings import LocalPolicyEmbeddings
+                    from app.rag.evaluation import _bm25_scores, _bilingual_query_matches, _rrf_rank
+
+                    clause_ids = sorted(clause_sources)
+                    bm25_clause_scores = _bm25_scores(query, clause_ids, clause_sources, include_cjk=True)
+                    embeddings = LocalPolicyEmbeddings(settings.local_embedding_model_path)
+                    document_vectors = embeddings.embed_documents([clause_sources[key] for key in clause_ids])
+                    query_vector = embeddings.embed_query(query)
+                    dense_clause_scores = {
+                        key: sum(a * b for a, b in zip(query_vector, vector, strict=True))
+                        for key, vector in zip(clause_ids, document_vectors, strict=True)
+                    }
+                    policy_bm25 = {
+                        row.policy_id: max(bm25_clause_scores[str(clause["chunk_id"])] for clause in clauses_by_policy[row.policy_id])
+                        for row in candidates
+                    }
+                    policy_dense = {
+                        row.policy_id: max(dense_clause_scores[str(clause["chunk_id"])] for clause in clauses_by_policy[row.policy_id])
+                        for row in candidates
+                    }
+                    bm25_order = sorted(policy_bm25, key=lambda policy_id: (-policy_bm25[policy_id], policy_id))
+                    dense_order = sorted(policy_dense, key=lambda policy_id: (-policy_dense[policy_id], policy_id))
+                    bm25_unique = len(bm25_order) == 1 or policy_bm25[bm25_order[0]] > policy_bm25[bm25_order[1]]
+                    dense_unique = len(dense_order) == 1 or policy_dense[dense_order[0]] - policy_dense[dense_order[1]] > 1e-8
+                    retrieval_diagnostics = {
+                        "bm25_top_policy_id": bm25_order[0],
+                        "dense_top_policy_id": dense_order[0],
+                        "bm25_top_score": round(policy_bm25[bm25_order[0]], 6),
+                        "dense_top_score": round(policy_dense[dense_order[0]], 6),
+                        "bm25_unique_top": bm25_unique,
+                        "dense_unique_top": dense_unique,
+                    }
+                    query_expansion_terms = _bilingual_query_matches(query)
+                    if (bm25_unique and dense_unique and policy_bm25[bm25_order[0]] > 0
+                            and policy_dense[dense_order[0]] > 0 and bm25_order[0] == dense_order[0]):
+                        policy = next(row for row in candidates if row.policy_id == bm25_order[0])
+                        bm25_clause_order = sorted(clause_ids, key=lambda key: (-bm25_clause_scores[key], key))
+                        dense_clause_order = sorted(clause_ids, key=lambda key: (-dense_clause_scores[key], key))
+                        fused = _rrf_rank([bm25_clause_order, dense_clause_order])
+                        selected_id = next(key for key in fused if clause_by_id[key][0].policy_id == policy.policy_id)
+                        selected_clause = clause_by_id[selected_id][1]
+                        mode = "chroma_local_consensus"
+                    else:
+                        retrieval_ambiguous = True
+                        mode = "registry_abstain"
+                        retrieval_diagnostics["abstain_reason"] = "POLICY_RETRIEVAL_AMBIGUOUS"
+                except Exception:
+                    retrieval_ambiguous = True
+                    embedding_error = True
+                    mode = "registry_abstain"
+                    retrieval_diagnostics["abstain_reason"] = "LOCAL_EMBEDDING_UNAVAILABLE"
         if policy is not None:
             if selected_clause is None:
                 selected_clause = clauses_by_policy[policy.policy_id][0]
@@ -357,12 +441,13 @@ def _retrieve_policy(state: DealGuardState) -> dict[str, Any]:
     event = _event(
         "retrieve_policy", "conflict" if policy_conflict else "low_relevance" if evidence_low_relevance else "completed" if policy else "scope_ambiguous" if scope_ambiguous else "scope_unmatched" if scope_not_found else "ambiguous" if retrieval_ambiguous else "no_policy",
         "Overlapping eligible policies contain conflicting structured rules; authorization is blocked." if policy_conflict else "No lexical evidence matched the active policy text; quote authorization is blocked." if evidence_low_relevance else "Retrieved evidence from the active, effective policy scope." if policy else "The inquiry describes multiple discount scopes; clarification is required." if scope_ambiguous else "No active policy matches this explicit scope." if scope_not_found else "Multiple eligible Registry policies remain; clarification is required." if retrieval_ambiguous else "No active effective policy applies; execution will fail closed.",
-        {"policy_version": policy.version if policy else None, "retrieval_mode": mode, "candidate_count": len(candidates), "clause_count": sum(map(len, clauses_by_policy.values())) if candidates else 0, "citation_refs": [item.citation_ref for item in evidence], "query_expansion_terms": query_expansion_terms, "evidence_low_relevance": evidence_low_relevance, "policy_graph": policy_graph, "policy_conflict": policy_conflict, "scope": intent.policy_scope, "scope_ambiguous": scope_ambiguous, "scope_not_found": scope_not_found, "abstained": retrieval_ambiguous or policy_conflict or evidence_low_relevance},
+        {"policy_version": policy.version if policy else None, "retrieval_mode": mode, "candidate_count": len(candidates), "clause_count": sum(map(len, clauses_by_policy.values())) if candidates else 0, "citation_refs": [item.citation_ref for item in evidence], "query_expansion_terms": query_expansion_terms, "evidence_low_relevance": evidence_low_relevance, "policy_graph": policy_graph, "policy_conflict": policy_conflict, "scope": intent.policy_scope, "scope_ambiguous": scope_ambiguous, "scope_not_found": scope_not_found, "abstained": retrieval_ambiguous or policy_conflict or evidence_low_relevance, **retrieval_diagnostics},
     )
     return {
         "policy": policy, "evidence": [item.model_dump(mode="json") for item in evidence],
         "retrieval_ambiguous": retrieval_ambiguous,
         "evidence_low_relevance": evidence_low_relevance,
+        "embedding_error": embedding_error,
         "policy_conflict": policy_conflict,
         "policy_conflict_edges": conflict_edges,
         "scope_ambiguous": scope_ambiguous,
@@ -524,12 +609,15 @@ def build_workflow():
         return run
 
     graph.add_node("parse_intent", timed("parse_intent", _parse_intent))
+    from app.agents.action_planner import plan_read_tools
+    graph.add_node("action_planner", timed("action_planner", plan_read_tools))
     graph.add_node("load_business_data", timed("load_business_data", _load_business_data))
     graph.add_node("retrieve_policy", timed("retrieve_policy", _retrieve_policy))
     graph.add_node("validate_proposal", timed("validate_proposal", _validate))
     graph.add_node("save_quote", timed("save_quote", _save_quote))
     graph.add_edge(START, "parse_intent")
-    graph.add_edge("parse_intent", "load_business_data")
+    graph.add_edge("parse_intent", "action_planner")
+    graph.add_edge("action_planner", "load_business_data")
     graph.add_edge("load_business_data", "retrieve_policy")
     graph.add_edge("retrieve_policy", "validate_proposal")
     graph.add_conditional_edges("validate_proposal", _route_after_validation)

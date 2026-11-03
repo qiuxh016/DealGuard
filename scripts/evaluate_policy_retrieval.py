@@ -10,7 +10,7 @@ from time import perf_counter
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
-from app.agents.workflow import _LocalPolicyEmbeddings  # noqa: E402
+from app.rag.embeddings import LocalPolicyEmbeddings  # noqa: E402
 from app.core.config import settings  # noqa: E402
 from app.rag.evaluation import _bm25_rank, _metrics, _rrf_rank, evaluate_offline  # noqa: E402
 
@@ -20,7 +20,7 @@ DATA_DIR = ROOT / "data" / "policy_retrieval_eval"
 
 def evaluate_local_model(cases: list[dict], policies: list[dict], model_path: str) -> dict:
     load_started = perf_counter()
-    embeddings = _LocalPolicyEmbeddings(model_path)
+    embeddings = LocalPolicyEmbeddings(model_path)
     load_seconds = perf_counter() - load_started
 
     policy_ids = [policy["policy_id"] for policy in policies]
