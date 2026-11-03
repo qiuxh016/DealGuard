@@ -1,0 +1,18 @@
+{"case_id":"zh-missing-discount-2","split":"development","language":"zh","inquiry":"请为 P-100 报价 80 件，折扣还没确定。","expected_items":[{"product_id":"P-100","quantity":80,"requested_discount_pct":null}]}
+{"case_id":"zh-zero-quantity-2","split":"development","language":"zh","inquiry":"请为P-100报价0件，折扣5%。","expected_items":[{"product_id":"P-100","quantity":null,"requested_discount_pct":"5"}]}
+{"case_id":"en-over-limit-2","split":"development","language":"en","inquiry":"P-100 100 units at 125% discount.","expected_items":[{"product_id":"P-100","quantity":100,"requested_discount_pct":null}]}
+{"case_id":"en-negative-quantity-2","split":"development","language":"en","inquiry":"P-100 -3 units at 5% discount.","expected_items":[{"product_id":"P-100","quantity":null,"requested_discount_pct":"5"}]}
+{"case_id":"en-missing-quantity-2","split":"development","language":"en","inquiry":"P-100 quote at 7% discount.","expected_items":[{"product_id":"P-100","quantity":null,"requested_discount_pct":"7"}]}
+{"case_id":"en-missing-product-2","split":"development","language":"en","inquiry":"Quote 80 units at 6% discount.","expected_items":[{"product_id":null,"quantity":80,"requested_discount_pct":"6"}]}
+{"case_id":"en-over-limit-3","split":"development","language":"en","inquiry":"P-100 requests 110.5% off 50 units.","expected_items":[{"product_id":"P-100","quantity":50,"requested_discount_pct":null}]}
+{"case_id":"zh-negative-discount-2","split":"development","language":"zh","inquiry":"P-200 50 件，折扣 -3%。","expected_items":[{"product_id":"P-200","quantity":50,"requested_discount_pct":null}]}
+{"case_id":"en-valid-single-2","split":"development","language":"en","inquiry":"Product A is needed in 65 pieces at a 2% discount.","expected_items":[{"product_id":"P-100","quantity":65,"requested_discount_pct":"2"}]}
+{"case_id":"en-valid-multi-2","split":"development","language":"en","inquiry":"P-100 15 units at 4%; P-200 6 units at 2.5%.","expected_items":[{"product_id":"P-100","quantity":15,"requested_discount_pct":"4"},{"product_id":"P-200","quantity":6,"requested_discount_pct":"2.5"}]}
+{"case_id":"multi-invalid-quantity-2","split":"development","language":"en","inquiry":"P-100 10 units at 5%; P-200 0 units at 3%.","expected_items":[]}
+{"case_id":"zh-valid-multi-2","split":"development","language":"zh","inquiry":"P-100 20 件，折扣 4%；P-200 5 件，折扣 2%。","expected_items":[{"product_id":"P-100","quantity":20,"requested_discount_pct":"4"},{"product_id":"P-200","quantity":5,"requested_discount_pct":"2"}]}
+{"case_id":"zh-valid-single-2","split":"holdout","language":"zh","inquiry":"P-200 1,200件，折扣4.75%。","expected_items":[{"product_id":"P-200","quantity":1200,"requested_discount_pct":"4.75"}]}
+{"case_id":"zh-missing-quantity-2","split":"holdout","language":"zh","inquiry":"请为 P-100 报价，折扣 5%。","expected_items":[{"product_id":"P-100","quantity":null,"requested_discount_pct":"5"}]}
+{"case_id":"zh-invalid-discount-2","split":"holdout","language":"zh","inquiry":"P-100 100件，折扣 105%。","expected_items":[{"product_id":"P-100","quantity":100,"requested_discount_pct":null}]}
+{"case_id":"multi-missing-discount-2","split":"holdout","language":"zh","inquiry":"P-100 10件，折扣5%；P-200 4件，折扣未定。","expected_items":[]}
+{"case_id":"en-valid-multi-holdout-2","split":"holdout","language":"en","inquiry":"P-100 25 units at 3%; P-200 12 units at 1.5%.","expected_items":[{"product_id":"P-100","quantity":25,"requested_discount_pct":"3"},{"product_id":"P-200","quantity":12,"requested_discount_pct":"1.5"}]}
+{"case_id":"en-missing-discount-2","split":"holdout","language":"en","inquiry":"P-100 250 units; discount TBD.","expected_items":[{"product_id":"P-100","quantity":250,"requested_discount_pct":null}]}

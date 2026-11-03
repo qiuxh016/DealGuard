@@ -39,7 +39,9 @@ def multi_policy_corpus(client, monkeypatch):
     from app.core.config import settings
 
     monkeypatch.setattr(settings, "llm_api_key", "test-key")
+    monkeypatch.setattr(settings, "llm_model", "")
     monkeypatch.setattr(settings, "embedding_model", "deterministic-test-adapter")
+    monkeypatch.setattr(settings, "local_embedding_model_path", "")
     monkeypatch.setattr("langchain_openai.OpenAIEmbeddings", DeterministicTopicEmbeddings)
     now = datetime.now(timezone.utc)
     with client.app.state.session_factory() as db:
@@ -50,6 +52,7 @@ def multi_policy_corpus(client, monkeypatch):
             db.add(Policy(
                 policy_id=item["policy_id"], version=item["version"], title=item["title"],
                 action_type=item["action_type"], status="active", customer_tier=item["customer_tier"],
+                policy_scope=item.get("policy_scope", "general"), scope_product_id=item.get("scope_product_id"),
                 max_discount_pct=item["max_discount_pct"], review_max_discount_pct=item["review_max_discount_pct"],
                 exception_approval_allowed=item["exception_approval_allowed"],
                 effective_from=now - timedelta(days=1), source=item["source"], tenant_id="harborlight-demo",
@@ -71,7 +74,8 @@ def multi_policy_corpus(client, monkeypatch):
 
 @pytest.mark.parametrize("case", CASES, ids=lambda case: case["case_id"])
 def test_multi_policy_case_retrieves_exact_citation_and_guard_decision(multi_policy_corpus, client, case):
-    inquiry = f"P-100. {case['query']}"
+    scope_hint = {"EVAL-BULK": "bulk order", "EVAL-LOYALTY": "loyalty reward", "EVAL-EARLYPAY": "early payment", "EVAL-SEASON": "seasonal campaign", "EVAL-PRODUCT": "product-specific"}[case["topic"]]
+    inquiry = f"P-100. {scope_hint}. {case['query']}"
     response = client.post(
         "/api/v1/runs",
         headers={"X-Demo-Actor": "sales_a", "Idempotency-Key": f"retrieval-eval-{case['case_id']}"},
@@ -114,6 +118,26 @@ def test_multi_policy_benchmark_is_fixed_and_split_without_overlap():
     }
     valid_ids = {policy["policy_id"] for policy in POLICIES}
     assert all(set(case["candidate_policy_ids"]) == valid_ids for case in CASES)
+
+
+def test_scope_filter_reduces_single_candidate_to_registry_without_embedding(multi_policy_corpus, client, monkeypatch):
+    from app.core.config import settings
+    from app.agents import workflow
+
+    monkeypatch.setattr(settings, "local_embedding_model_path", "local-test-model")
+    monkeypatch.setattr(workflow, "_LocalPolicyEmbeddings", lambda _path: pytest.fail("single scoped candidate should use Registry"))
+    result = client.post(
+        "/api/v1/runs",
+        headers={"X-Demo-Actor": "sales_a", "Idempotency-Key": "scoped-registry-only"},
+        json={"inquiry": "bulk wholesale P-100 100 units at 1% discount"},
+    ).json()
+
+    assert result["decision"]["decision"] == "ALLOW"
+    assert result["intent"]["policy_scope"] == "bulk_order"
+    assert result["quote"] is not None
+    assert len(result["policy_evidence"]) == 1
+    assert result["policy_evidence"][0]["policy_id"] == "EVAL-BULK"
+    assert result["policy_evidence"][0]["retrieval_mode"] == "registry"
 
 
 def test_offline_evaluator_reports_mock_metrics_and_split_metrics():

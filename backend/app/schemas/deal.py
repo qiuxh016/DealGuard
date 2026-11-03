@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 PolicyActionType = Literal["quote_discount", "reference_only"]
+PolicyScope = Literal["general", "bulk_order", "loyalty", "early_payment", "seasonal_campaign", "product_specific"]
 
 
 class InquiryRequest(BaseModel):
@@ -12,10 +13,36 @@ class InquiryRequest(BaseModel):
 
 
 class InquiryIntent(BaseModel):
+    items: list["QuoteItemIntent"] = Field(default_factory=list, max_length=20)
     product_id: str | None = None
     quantity: int | None = Field(default=None, gt=0)
     requested_discount_pct: Decimal | None = Field(default=None, ge=0, le=100)
+    policy_scope: PolicyScope | None = None
     customer_message: str
+
+
+class QuoteItemIntent(BaseModel):
+    product_id: str
+    quantity: int = Field(gt=0)
+    requested_discount_pct: Decimal = Field(ge=0, le=100)
+
+
+class QuoteLineResponse(BaseModel):
+    product_id: str
+    product_name: str
+    currency: str
+    quantity: int
+    unit_price: Decimal
+    discount_pct: Decimal
+    subtotal: Decimal
+    discount_amount: Decimal
+    total: Decimal
+    policy_id: str
+    policy_version: str
+    policy_source: str
+    policy_scope: PolicyScope = "general"
+    available_stock: int | None = None
+    inventory_checked_at: datetime | None = None
 
 
 class ActionProposal(BaseModel):
@@ -33,7 +60,7 @@ class PolicyEvidence(BaseModel):
     title: str
     citation: str
     source: str
-    retrieval_mode: Literal["chroma", "demo", "registry"]
+    retrieval_mode: Literal["chroma", "chroma_local", "chroma_local_consensus", "local_consensus", "demo", "registry"]
 
 
 class GuardDecision(BaseModel):
@@ -42,6 +69,8 @@ class GuardDecision(BaseModel):
     policy_id: str | None = None
     policy_version: str | None = None
     human_message: str
+    suggested_discount_pct: Decimal | None = None
+    suggested_product_id: str | None = None
 
 
 class QuoteBreakdown(BaseModel):
@@ -62,7 +91,9 @@ class QuoteDraftResponse(BaseModel):
     breakdown: QuoteBreakdown
     policy_id: str
     policy_version: str
+    policy_scope: PolicyScope = "general"
     created_at: datetime
+    lines: list[QuoteLineResponse] = Field(default_factory=list)
 
 
 class TraceEvent(BaseModel):
@@ -94,6 +125,8 @@ class PolicyResponse(BaseModel):
     version: str
     title: str
     action_type: PolicyActionType
+    policy_scope: PolicyScope
+    scope_product_id: str | None = None
     status: Literal["active", "inactive"]
     max_discount_pct: Decimal | None = None
     review_max_discount_pct: Decimal | None = None
@@ -115,9 +148,11 @@ class ApprovalRequestResponse(BaseModel):
     discount_pct: Decimal
     policy_id: str
     policy_version: str
+    policy_scope: PolicyScope = "general"
     state: Literal["PENDING", "APPROVED", "REJECTED", "STALE"]
     reason: str | None = None
     created_at: datetime
+    lines: list[dict] | None = None
 
 
 class ApprovalOutcome(BaseModel):
@@ -141,6 +176,8 @@ class ApprovalRejectRequest(BaseModel):
 class PolicyDraftUpdate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     action_type: PolicyActionType
+    policy_scope: PolicyScope = "general"
+    scope_product_id: str | None = Field(default=None, min_length=1, max_length=80)
     customer_tier: Literal["VIP", "Standard"] = "VIP"
     max_discount_pct: Decimal | None = Field(default=None, ge=0, le=100)
     review_max_discount_pct: Decimal | None = Field(default=None, ge=0, le=100)
@@ -148,6 +185,12 @@ class PolicyDraftUpdate(BaseModel):
 
     @model_validator(mode="after")
     def validate_action_rules(self):
+        if self.action_type == "reference_only" and (self.policy_scope != "general" or self.scope_product_id is not None):
+            raise ValueError("Reference-only policies cannot define executable applicability scopes.")
+        if self.policy_scope == "product_specific" and not self.scope_product_id:
+            raise ValueError("Product-specific policies must identify the product they apply to.")
+        if self.policy_scope != "product_specific" and self.scope_product_id is not None:
+            raise ValueError("Only product-specific policies can identify a product scope.")
         if self.action_type == "quote_discount":
             if self.max_discount_pct is None:
                 raise ValueError("A discount policy must define its direct discount limit.")
@@ -166,6 +209,8 @@ class PolicyDraftResponse(BaseModel):
     version: str
     title: str
     action_type: PolicyActionType | None = None
+    policy_scope: PolicyScope = "general"
+    scope_product_id: str | None = None
     customer_tier: str
     max_discount_pct: Decimal | None
     review_max_discount_pct: Decimal | None

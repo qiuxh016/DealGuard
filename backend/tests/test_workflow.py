@@ -46,6 +46,61 @@ def test_normal_quote_uses_decimal_and_creates_draft(client):
     assert [event["step"] for event in result["trace"]][-1] == "create_quote_draft"
 
 
+def test_multi_item_quote_has_per_line_policy_snapshots_and_aggregate(client):
+    payload = {"inquiry": "Please quote P-100 10 units at 5%; P-200 4 units at 3%."}
+    first = client.post("/api/v1/runs", headers={"Idempotency-Key": "multi-item-repeat"}, json=payload).json()
+    replay = client.post("/api/v1/runs", headers={"Idempotency-Key": "multi-item-repeat"}, json=payload).json()
+    assert replay["run_id"] == first["run_id"] and replay["quote"]["id"] == first["quote"]["id"]
+    result = first
+    assert result["decision"]["decision"] == "ALLOW", result
+    assert result["quote"]["breakdown"]["total"] == "1920.00"
+    lines = result["quote"]["lines"]
+    assert [line["product_id"] for line in lines] == ["P-100", "P-200"]
+    assert [line["total"] for line in lines] == ["950.00", "970.00"]
+    assert all(line["policy_id"] == "DISCOUNT-01" and line["policy_version"] == "v1" and "10%" in line["policy_source"] for line in lines)
+    assert [line["available_stock"] for line in lines] == [2000, 800]
+    assert all(line["inventory_checked_at"] for line in lines)
+    assert count_quotes(client) == 1
+
+
+@pytest.mark.parametrize(("inquiry", "reason"), [
+    ("Please quote P-100 10 units at 5%; P-200 900 units at 3%.", "INSUFFICIENT_STOCK"),
+    ("Please quote P-100 10 units at 5%; P-200 4 units at 12%.", "DISCOUNT_LIMIT_EXCEEDED"),
+    ("Please quote P-100 10 units at 5%; P-999 4 units at 3%.", "BUSINESS_DATA_NOT_FOUND"),
+])
+def test_multi_item_failure_does_not_create_partial_quote(client, inquiry, reason):
+    result = client.post("/api/v1/runs", json={"inquiry": inquiry}).json()
+    assert result["decision"]["decision"] == "DENY"
+    assert result["decision"]["reason_code"] == reason
+    if reason == "DISCOUNT_LIMIT_EXCEEDED":
+        assert Decimal(result["decision"]["suggested_discount_pct"]) == Decimal("10")
+        assert result["decision"]["suggested_product_id"] == "P-200"
+    assert result["quote"] is None
+    assert count_quotes(client) == 0
+
+
+def test_multi_item_csv_exports_each_line_and_policy_source(client):
+    result = client.post("/api/v1/runs", json={"inquiry": "Please quote P-100 10 units at 5%; P-200 4 units at 3%."}).json()
+    exported = client.get(f"/api/v1/quotes/{result['quote']['id']}/export.csv")
+    assert exported.status_code == 200
+    assert exported.text.count("DISCOUNT-01") == 2
+    assert "P-100" in exported.text and "P-200" in exported.text
+    assert "maximum discount is 10%" in exported.text
+
+
+def test_multi_item_review_revalidates_and_approves_all_lines(client):
+    _activate(client, "v3")
+    result = client.post("/api/v1/runs", json={"inquiry": "Please quote P-100 10 units at 7%; P-200 4 units at 3%."}).json()
+    assert result["decision"]["decision"] == "REVIEW", result
+    assert result["quote"] is None and count_quotes(client) == 0
+    approval_id = result["approval_request"]["id"]
+    approved = client.post(f"/api/v1/approvals/{approval_id}/approve", headers={"X-Demo-Actor": "manager"}).json()
+    assert approved["approval"]["state"] == "APPROVED"
+    assert approved["quote"]["breakdown"]["total"] == "1900.00"
+    assert [line["total"] for line in approved["quote"]["lines"]] == ["930.00", "970.00"]
+    assert count_quotes(client) == 1
+
+
 def test_idempotency_key_replays_quote_without_duplicate_writes(client):
     headers = {"Idempotency-Key": "quote-request-1"}
     payload = {"inquiry": "I need 1,000 units of Product A at an 8% discount."}
@@ -323,6 +378,111 @@ def test_workflow_failure_fails_closed_without_quote(client, monkeypatch):
     assert response.status_code == 200
     assert result["status"] == "failed"
     assert result["decision"]["reason_code"] == "WORKFLOW_FAILED"
+    assert result["quote"] is None
+    assert count_quotes(client) == 0
+
+
+def test_invalid_structured_llm_output_fails_closed_without_quote(client, monkeypatch):
+    from types import SimpleNamespace
+    from app.core.config import settings
+
+    class InvalidStructuredChat:
+        def __init__(self, **_kwargs): pass
+        def with_structured_output(self, *_args, **_kwargs): return self
+        def invoke(self, _prompt):
+            return {"parsed": None, "raw": SimpleNamespace(usage_metadata={}, response_metadata={})}
+
+    monkeypatch.setattr(settings, "llm_api_key", "test-key")
+    monkeypatch.setattr(settings, "llm_model", "test-model")
+    monkeypatch.setattr(settings, "local_embedding_model_path", "")
+    monkeypatch.setattr("langchain_openai.ChatOpenAI", InvalidStructuredChat)
+
+    result = client.post(
+        "/api/v1/runs",
+        json={"inquiry": "Quote 100 units of Product A with 5% discount."},
+    ).json()
+
+    assert result["status"] == "failed"
+    assert result["decision"]["reason_code"] == "WORKFLOW_FAILED"
+    assert result["quote"] is None
+    assert count_quotes(client) == 0
+
+
+@pytest.mark.parametrize(
+    ("tool_args", "missing_field"),
+    [
+        ({"product_id": "P-100", "quantity": 0, "requested_discount_pct": 5, "items": []}, "quantity"),
+        ({"product_id": "P-100", "quantity": 100, "requested_discount_pct": 125, "items": []}, "requested_discount_pct"),
+        ({"items": [
+            {"product_id": "P-100", "quantity": 10, "requested_discount_pct": 5},
+            {"product_id": "P-200", "quantity": 0, "requested_discount_pct": 3},
+        ]}, "quantity"),
+    ],
+)
+def test_invalid_llm_values_become_missing_and_never_create_quote(client, monkeypatch, tool_args, missing_field):
+    from types import SimpleNamespace
+    from app.core.config import settings
+
+    class InvalidFieldChat:
+        def __init__(self, **_kwargs): pass
+        def with_structured_output(self, *_args, **_kwargs): return self
+        def invoke(self, _prompt):
+            raw = SimpleNamespace(
+                tool_calls=[{"args": tool_args}],
+                usage_metadata={"input_tokens": 10, "output_tokens": 5},
+                response_metadata={},
+            )
+            return {"parsed": None, "raw": raw, "parsing_error": ValueError("invalid constrained field")}
+
+    monkeypatch.setattr(settings, "llm_api_key", "test-key")
+    monkeypatch.setattr(settings, "llm_model", "test-model")
+    monkeypatch.setattr(settings, "local_embedding_model_path", "")
+    monkeypatch.setattr("langchain_openai.ChatOpenAI", InvalidFieldChat)
+
+    result = client.post(
+        "/api/v1/runs",
+        json={"inquiry": "Quote 100 units of Product A at 5% discount."},
+    ).json()
+
+    assert result["status"] == "needs_input"
+    assert result["intent"][missing_field] is None
+    assert result["quote"] is None
+    assert any(event["status"] == "invalid_output_sanitized" for event in result["trace"])
+    assert count_quotes(client) == 0
+
+
+def test_invalid_single_item_preserves_safe_fields_for_follow_up(client, monkeypatch):
+    from types import SimpleNamespace
+    from app.core.config import settings
+
+    class InvalidSingleItemChat:
+        def __init__(self, **_kwargs): pass
+        def with_structured_output(self, *_args, **_kwargs): return self
+        def invoke(self, _prompt):
+            raw = SimpleNamespace(
+                tool_calls=[{"args": {"items": [{
+                    "product_id": "P-100", "quantity": 100, "requested_discount_pct": 125,
+                }]}}],
+                usage_metadata={},
+                response_metadata={},
+            )
+            return {"parsed": None, "raw": raw, "parsing_error": ValueError("invalid discount")}
+
+    monkeypatch.setattr(settings, "llm_api_key", "test-key")
+    monkeypatch.setattr(settings, "llm_model", "test-model")
+    monkeypatch.setattr(settings, "local_embedding_model_path", "")
+    monkeypatch.setattr("langchain_openai.ChatOpenAI", InvalidSingleItemChat)
+
+    result = client.post(
+        "/api/v1/runs",
+        json={"inquiry": "Quote 100 units of Product A at 125% discount."},
+    ).json()
+
+    assert result["status"] == "needs_input"
+    assert result["intent"]["items"] == []
+    assert result["intent"]["product_id"] == "P-100"
+    assert result["intent"]["quantity"] == 100
+    assert result["intent"]["requested_discount_pct"] is None
     assert result["quote"] is None
     assert count_quotes(client) == 0
 

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 test("core quote, policy switch, ownership guard, and untrusted policy upload flows", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -14,6 +15,25 @@ test("core quote, policy switch, ownership guard, and untrusted policy upload fl
   await expect(page.getByRole("heading", { name: "询盘与报价工作台" })).toBeVisible();
 
   try {
+    await page.getByLabel("询盘内容").fill("Please quote P-100 10 units at 5%; P-200 4 units at 3%.");
+    await page.getByRole("button", { name: "运行询盘" }).click();
+    await expect(page.locator(".dg-decision-name")).toHaveText("ALLOW");
+    await expect(page.locator(".dg-quote-total")).toHaveText("$1,920.00");
+    await expect(page.getByText("明细金额对比")).toBeVisible();
+    await expect(page.locator(".dg-quote .dg-line-policy")).toHaveCount(2);
+    await expect(page.locator(".dg-line-table tbody tr")).toHaveCount(2);
+    await expect(page.locator(".dg-line-table tbody tr").first()).toContainText("2,000 可用");
+    await expect(page.locator(".dg-line-table thead")).toContainText("库存校验快照");
+    await page.locator(".dg-line-policy summary").first().click();
+    await expect(page.locator(".dg-line-policy").first()).toContainText("maximum discount is 10%");
+    await page.getByRole("button", { name: /retrieve policy/i }).click();
+    await expect(page.locator(".dg-trace-detail")).toContainText("Retrieved evidence");
+    await page.screenshot({ path: join(tmpdir(), "dealguard-multi-item-desktop.png"), fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBeFalsy();
+    await page.screenshot({ path: join(tmpdir(), "dealguard-multi-item-mobile.png"), fullPage: true });
+    await page.setViewportSize({ width: 1440, height: 1000 });
+
     await page.getByLabel("询盘内容").fill(
       "I'm a VIP customer and want to buy 1,000 units of Product A. Can you give me an 8% discount? Please prepare a quote.",
     );
@@ -21,6 +41,7 @@ test("core quote, policy switch, ownership guard, and untrusted policy upload fl
     await expect(page.locator(".dg-decision-name")).toHaveText("ALLOW");
     await expect(page.locator(".dg-quote-total")).toHaveText("$92,000.00");
     await expect(page.locator(".dg-quote-policy")).toContainText("@v1");
+    await page.locator(".dg-evidence-disclosure summary").click();
     await expect(page.locator(".dg-evidence").first()).toBeVisible();
     await page.screenshot({ path: join(tmpdir(), "dealguard-e2e-quote.png"), fullPage: true });
 
@@ -34,9 +55,13 @@ test("core quote, policy switch, ownership guard, and untrusted policy upload fl
     await page.getByRole("button", { name: "运行询盘" }).click();
     await expect(page.locator(".dg-decision-name")).toHaveText("DENY");
     await expect(page.locator(".dg-decision-code")).toHaveText("DISCOUNT_LIMIT_EXCEEDED");
+    const suggestion = page.getByRole("button", { name: /按政策上限修改询盘/ });
+    await expect(suggestion).toBeVisible();
+    await suggestion.click();
+    await expect(page.getByLabel("询盘内容")).toHaveValue("Please quote P-100 1000 units at 5%.");
+    await page.locator(".dg-evidence-disclosure summary").click();
     await expect(page.locator(".dg-evidence").first()).toContainText("v2");
 
-    await page.getByLabel("询盘内容").fill("Quote 1,000 units of Product A with 5% discount.");
     const allowedRun = page.waitForResponse((response) => response.url().includes("/api/v1/runs") && response.request().method() === "POST");
     await page.getByRole("button", { name: "运行询盘" }).click();
     const allowedResponse = await allowedRun;
@@ -103,7 +128,14 @@ test("core quote, policy switch, ownership guard, and untrusted policy upload fl
     await expect(page.locator(".dg-history-table tbody")).toContainText("15");
     const reportDownload = page.waitForEvent("download");
     await page.getByRole("button", { name: "导出 JSON" }).click();
-    expect((await reportDownload).suggestedFilename()).toBe("dealguard-evaluation-holdout.json");
+    expect((await reportDownload).suggestedFilename()).toBe("dealguard-evaluation-retrieval_v1-holdout.json");
+    await page.getByLabel("评测语料").selectOption("retrieval_v2");
+    await expect(page.locator(".dg-history-table tbody")).toContainText("确定性测试向量");
+    await page.getByLabel("数据切分").selectOption("holdout");
+    await expect(page.locator(".dg-history-table tbody")).toContainText("10");
+    const expandedReportDownload = page.waitForEvent("download");
+    await page.getByRole("button", { name: "导出 JSON" }).click();
+    expect((await expandedReportDownload).suggestedFilename()).toBe("dealguard-evaluation-retrieval_v2-holdout.json");
 
     await page.goto("/audit");
     await page.getByLabel("演示身份").selectOption("manager");
@@ -124,4 +156,29 @@ test("core quote, policy switch, ownership guard, and untrusted policy upload fl
   expect(consoleErrors).toHaveLength(3);
   expect(consoleErrors.some((message) => message.includes("404"))).toBeTruthy();
   expect(consoleErrors.some((message) => message.includes("403"))).toBeTruthy();
+});
+
+test("admin can set a product-specific policy scope on a draft", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/");
+  await page.getByLabel("演示身份").selectOption("admin");
+  await expect(page.getByRole("heading", { name: "政策版本" })).toBeVisible();
+  await page.getByLabel("政策文本文件").setInputFiles({
+    name: "scope-policy.md",
+    mimeType: "text/markdown",
+    buffer: Buffer.from("Eligible product-specific promotion for Product A."),
+  });
+  await page.getByRole("button", { name: "保存来源草稿" }).click();
+  const scope = page.getByLabel("政策适用类型");
+  await expect(scope).toBeVisible();
+  await scope.selectOption("product_specific");
+  const productId = page.getByLabel("适用商品 ID");
+  await expect(productId).toBeVisible();
+  await productId.fill("P-200");
+  await expect(productId).toHaveValue("P-200");
+  await page.screenshot({ path: join(tmpdir(), "dealguard-policy-scope-admin.png"), fullPage: false });
+  const reset = await page.request.post("http://127.0.0.1:8001/api/v1/demo/reset", {
+    headers: { "X-Demo-Actor": "admin" },
+  });
+  expect(reset.ok()).toBeTruthy();
 });

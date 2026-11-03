@@ -21,6 +21,11 @@ def test_run_history_filters_and_sales_scope(client):
     assert own.json()["items"][0]["run_id"] == allow["run_id"]
     assert "inquiry" not in own.json()["items"][0]
 
+    manager_detail = client.get(f"/api/v1/runs/{allow['run_id']}", headers={"X-Demo-Actor": "manager"})
+    assert manager_detail.status_code == 404
+    admin_detail = client.get(f"/api/v1/runs/{allow['run_id']}", headers={"X-Demo-Actor": "admin"})
+    assert admin_detail.status_code == 200
+
     filtered = client.get("/api/v1/runs?decision=DENY", headers={"X-Demo-Actor": "admin"})
     assert filtered.status_code == 200
     assert filtered.json()["total"] == 1
@@ -73,3 +78,14 @@ def test_evaluation_report_is_role_protected_and_labeled_as_test_adapter(client)
     assert report["real_model_evaluation"] is False
     assert report["methods"]["rrf"]["cases"] == 15
     assert "failed_case_ids" in report["methods"]["bm25"]
+
+    expanded = client.get(
+        "/api/v1/evaluation?dataset=retrieval_v2&split=holdout",
+        headers={"X-Demo-Actor": "admin"},
+    )
+    assert expanded.status_code == 200
+    expanded_report = expanded.json()
+    assert expanded_report["dataset"] == "retrieval_v2"
+    assert expanded_report["split"] == "holdout"
+    assert expanded_report["methods"]["rrf"]["cases"] == 10
+    assert expanded_report["dataset_sha256"] != report["dataset_sha256"]

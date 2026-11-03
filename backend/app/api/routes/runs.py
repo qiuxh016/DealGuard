@@ -15,6 +15,7 @@ from app.db.database import get_db
 from app.db.models import ApprovalRequest, RunRecord
 from app.schemas.deal import ApprovalRequestResponse, InquiryRequest, RunResponse, TraceEvent
 from app.services.actors import get_current_actor
+from app.services.permissions import has_capability
 from app.db.models import DemoActor
 
 router = APIRouter(prefix="/runs", tags=["runs"])
@@ -37,8 +38,10 @@ def list_runs(
     if created_from and created_to and created_from > created_to:
         raise HTTPException(status_code=422, detail={"code": "INVALID_TIME_RANGE", "message": "created_from must be earlier than created_to."})
     query = select(RunRecord).where(RunRecord.tenant_id == actor.tenant_id)
-    if actor.role not in {"admin", "manager"}:
+    if has_capability(actor, "runs.read_own"):
         query = query.where(RunRecord.actor_id == actor.id)
+    elif not has_capability(actor, "runs.read_tenant"):
+        raise HTTPException(status_code=403, detail={"code": "RUNS_ROLE_REQUIRED", "message": "This role cannot view run history."})
     rows = db.scalars(query.order_by(RunRecord.created_at.desc())).all()
     filtered = []
     for row in rows:
@@ -190,7 +193,9 @@ def create_run(
                 tenant_id=actor.tenant_id,
                 product_id=proposal["product_id"], quantity=proposal["quantity"],
                 discount_pct=proposal["requested_discount_pct"], policy_id=response.decision.policy_id,
-                policy_version=response.decision.policy_version, state="PENDING", reason=response.decision.reason_code,
+                policy_version=response.decision.policy_version, policy_scope=(state.get("intent") or {}).get("policy_scope") or "general",
+                state="PENDING", reason=response.decision.reason_code,
+                lines=state.get("line_results") and [{"proposal": r["proposal"], "policy_id": r["decision"]["policy_id"], "policy_version": r["decision"]["policy_version"], "policy_source": r["policy_source"], "available_stock": r["available_stock"], "inventory_checked_at": r["inventory_checked_at"]} for r in state["line_results"]] or None,
             )
             db.add(approval)
             db.flush()
@@ -247,6 +252,6 @@ def get_run(
     db: Session = Depends(get_db),
 ) -> RunResponse:
     record = db.scalar(select(RunRecord).where(RunRecord.id == run_id, RunRecord.tenant_id == actor.tenant_id))
-    if record is None or (record.actor_id != actor.id and actor.role != "admin"):
+    if record is None or (not has_capability(actor, "runs.read_all") and (not has_capability(actor, "runs.read_own") or record.actor_id != actor.id)):
         raise HTTPException(status_code=404, detail={"code": "RUN_NOT_FOUND", "message": "Run not found."})
     return RunResponse(run_id=record.id, **record.result)

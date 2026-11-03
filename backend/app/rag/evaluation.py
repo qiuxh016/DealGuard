@@ -20,7 +20,7 @@ def _tokens(text: str) -> list[str]:
 
 def _bm25_rank(query: str, candidate_ids: list[str], sources: dict[str, str]) -> list[str]:
     documents = {policy_id: _tokens(sources[policy_id]) for policy_id in candidate_ids}
-    query_terms = set(_tokens(query))
+    query_terms = sorted(set(_tokens(query)))
     average_length = sum(map(len, documents.values())) / max(len(documents), 1)
     scores: dict[str, float] = {}
     for policy_id, document in documents.items():

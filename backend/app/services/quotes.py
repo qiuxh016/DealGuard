@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.db.models import Customer, DemoActor, Policy, Product, QuoteDraft
 from app.guards.business_rules import evaluate_quote
 from app.schemas.deal import ActionProposal, QuoteBreakdown, QuoteDraftResponse, QuoteUpdateRequest
+from app.services.permissions import has_capability
 
 
 def quote_response(row: QuoteDraft) -> QuoteDraftResponse:
@@ -14,7 +15,8 @@ def quote_response(row: QuoteDraft) -> QuoteDraftResponse:
             discount_pct=row.discount_pct, subtotal=row.subtotal,
             discount_amount=row.discount_amount, total=row.total,
         ),
-        policy_id=row.policy_id, policy_version=row.policy_version, created_at=row.created_at,
+        policy_id=row.policy_id, policy_version=row.policy_version, policy_scope=row.policy_scope, created_at=row.created_at,
+        lines=row.lines or [],
     )
 
 
@@ -22,8 +24,10 @@ def update_quote(db: Session, actor: DemoActor, quote_id: str, body: QuoteUpdate
     row = db.query(QuoteDraft).filter(QuoteDraft.id == quote_id, QuoteDraft.tenant_id == actor.tenant_id).first()
     if row is None:
         raise HTTPException(status_code=404, detail={"code": "QUOTE_NOT_FOUND", "message": "Quote draft not found."})
-    if actor.role != "sales" or row.owner_actor_id != actor.id or row.customer_id != actor.customer_id:
+    if not has_capability(actor, "quote.update_own") or row.owner_actor_id != actor.id or row.customer_id != actor.customer_id:
         raise HTTPException(status_code=403, detail={"code": "RESOURCE_NOT_OWNED", "message": "This demo actor cannot update this quote."})
+    if row.lines and len(row.lines) > 1:
+        raise HTTPException(status_code=409, detail={"code": "MULTI_ITEM_UPDATE_UNSUPPORTED", "message": "Multi-item quote lines are immutable in this demo; create a new quote to change requested discounts."})
     product = db.query(Product).filter(Product.id == row.product_id, Product.tenant_id == actor.tenant_id).first()
     active_policy = db.query(Policy).filter_by(tenant_id=actor.tenant_id, policy_id=row.policy_id, action_type="quote_discount", status="active", customer_tier="VIP").first()
     customer = db.query(Customer).filter(Customer.id == row.customer_id, Customer.tenant_id == actor.tenant_id).first()
@@ -34,7 +38,7 @@ def update_quote(db: Session, actor: DemoActor, quote_id: str, body: QuoteUpdate
         quantity=row.quantity, requested_discount_pct=body.requested_discount_pct,
         target_quote_id=row.id,
     )
-    decision, breakdown = evaluate_quote(actor, customer, product, active_policy, proposal)
+    decision, breakdown = evaluate_quote(actor, customer, product, active_policy, proposal, row.policy_scope)
     if decision.decision != "ALLOW" or breakdown is None:
         raise HTTPException(status_code=409, detail={"code": decision.reason_code, "message": decision.human_message})
     row.unit_price = breakdown.unit_price

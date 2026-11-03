@@ -9,7 +9,9 @@
       "max_discount_pct": "10",
       "review_max_discount_pct": null,
       "exception_approval_allowed": false,
-      "source": "For VIP bulk, wholesale and high-volume quantity orders, including qualified large purchases, case-lot orders and pallet orders, customers may receive up to a 10% quantity discount. The structured direct limit is 10%."
+      "source": "For VIP bulk, wholesale and high-volume quantity orders, including qualified large purchases, case-lot orders and pallet orders, customers may receive up to a 10% quantity discount. The structured direct limit is 10%.",
+      "policy_scope": "bulk_order",
+      "scope_product_id": null
     },
     {
       "policy_id": "EVAL-LOYALTY",
@@ -20,7 +22,9 @@
       "max_discount_pct": "5",
       "review_max_discount_pct": "8",
       "exception_approval_allowed": true,
-      "source": "For returning VIP accounts with a long-standing customer relationship, loyalty rebates up to 5% may be granted directly. Repeat-buyer rewards, loyal member renewals and retention requests above 5% and up to 8% require manager review."
+      "source": "For returning VIP accounts with a long-standing customer relationship, loyalty rebates up to 5% may be granted directly. Repeat-buyer rewards, loyal member renewals and retention requests above 5% and up to 8% require manager review.",
+      "policy_scope": "loyalty",
+      "scope_product_id": null
     },
     {
       "policy_id": "EVAL-EARLYPAY",
@@ -31,7 +35,9 @@
       "max_discount_pct": "7",
       "review_max_discount_pct": null,
       "exception_approval_allowed": false,
-      "source": "VIP customers who prepay, make an upfront or advance payment, pay cash, promptly settle the invoice or clear it within seven days may receive an early-payment concession up to 7%. The direct limit is 7%."
+      "source": "VIP customers who prepay, make an upfront or advance payment, pay cash, promptly settle the invoice or clear it within seven days may receive an early-payment concession up to 7%. The direct limit is 7%.",
+      "policy_scope": "early_payment",
+      "scope_product_id": null
     },
     {
       "policy_id": "EVAL-SEASON",
@@ -42,7 +48,9 @@
       "max_discount_pct": "6",
       "review_max_discount_pct": "9",
       "exception_approval_allowed": true,
-      "source": "During approved seasonal, holiday, spring, summer, year-end, festive event or campaign offers, VIP customers may receive a 6% promotion directly. A seasonal offer above 6% and up to 9% requires manager review."
+      "source": "During approved seasonal, holiday, spring, summer, year-end, festive event or campaign offers, VIP customers may receive a 6% promotion directly. A seasonal offer above 6% and up to 9% requires manager review.",
+      "policy_scope": "seasonal_campaign",
+      "scope_product_id": null
     },
     {
       "policy_id": "EVAL-PRODUCT",
@@ -53,7 +61,9 @@
       "max_discount_pct": "4",
       "review_max_discount_pct": null,
       "exception_approval_allowed": false,
-      "source": "Selected Product A catalog items in the designated product category, series, model, product line or product-specific range may receive a category promotion up to 4%. The direct product-specific discount limit is 4%."
+      "source": "Selected Product A catalog items in the designated product category, series, model, product line or product-specific range may receive a category promotion up to 4%. The direct product-specific discount limit is 4%.",
+      "policy_scope": "product_specific",
+      "scope_product_id": "P-100"
     }
   ]
 }

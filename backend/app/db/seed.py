@@ -23,6 +23,7 @@ def seed_demo_data(db: Session) -> None:
             Customer(id="C-001", name="HarborLight VIP Buyer", tier="VIP", tenant_id=TENANT_ID),
             Customer(id="C-002", name="HarborLight Standard Buyer", tier="Standard", tenant_id=TENANT_ID),
             Product(id="P-100", name="Product A", currency="USD", unit_price=Decimal("100.00"), stock=2000),
+            Product(id="P-200", name="Product B", currency="USD", unit_price=Decimal("250.00"), stock=800),
             Policy(
                 policy_id=POLICY_ID, version="v1", title="VIP discount limit v1", action_type="quote_discount", status="active",
                 customer_tier="VIP", max_discount_pct=Decimal("10.00"), exception_approval_allowed=False,
@@ -47,6 +48,8 @@ def seed_demo_data(db: Session) -> None:
                 actor.display_name, actor.role, actor.customer_id, actor.tenant_id = name, role, customer_id, TENANT_ID
     if not is_new_demo and not db.get(DemoActor, "manager"):
         db.add(DemoActor(id="manager", display_name="Demo Manager", role="manager", customer_id=None))
+    if not is_new_demo and not db.get(Product, "P-200"):
+        db.add(Product(id="P-200", name="Product B", currency="USD", unit_price=Decimal("250.00"), stock=800, tenant_id=TENANT_ID))
     if not is_new_demo and not db.scalar(select(Policy).where(Policy.policy_id == POLICY_ID, Policy.version == "v3")):
         db.add(Policy(
             policy_id=POLICY_ID, version="v3", title="VIP discount limit v3 with manager review", action_type="quote_discount", status="inactive",

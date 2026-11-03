@@ -12,6 +12,7 @@ from app.guards.business_rules import evaluate_quote
 from app.schemas.deal import ActionProposal, GuardDecision, InquiryIntent, MetricsResponse, PolicyDiffRequest, PolicyDiffResponse, PolicyDiffSide, PolicyDraftResponse, PolicyDraftUpdate
 from app.db.models import RunRecord
 from app.services.actors import get_current_actor
+from app.services.permissions import has_capability, require_capability
 from app.services.policy_audit import add_policy_audit_event
 from app.services.policies import activate_policy
 
@@ -21,8 +22,7 @@ MAX_UPLOAD_BYTES = 1024 * 1024
 
 @router.get("/metrics", response_model=MetricsResponse)
 def get_metrics(actor: DemoActor = Depends(get_current_actor), db: Session = Depends(get_db)):
-    if actor.role not in {"admin", "manager"}:
-        raise HTTPException(status_code=403, detail={"code": "METRICS_ROLE_REQUIRED", "message": "Only the demo manager or admin can view run metrics."})
+    require_capability(actor, "metrics.read", code="METRICS_ROLE_REQUIRED", message="Only the demo manager or admin can view run metrics.")
     rows = db.scalars(select(RunRecord).where(RunRecord.tenant_id == actor.tenant_id)).all()
     decisions = [(row.result or {}).get("decision", {}).get("decision") for row in rows]
     durations = [row.duration_ms for row in rows if row.duration_ms is not None]
@@ -42,7 +42,7 @@ def get_metrics(actor: DemoActor = Depends(get_current_actor), db: Session = Dep
 
 
 def _admin(actor: DemoActor, db: Session, action: str, policy_id: str | None = None, version: str | None = None):
-    if actor.role != "admin":
+    if not has_capability(actor, "policy_drafts.manage"):
         add_policy_audit_event(db, actor, action, "DENIED", "ADMIN_REQUIRED", policy_id, version)
         db.commit()
         raise HTTPException(status_code=403, detail={"code": "ADMIN_REQUIRED", "message": "Only the demo admin can manage policy drafts."})
@@ -51,6 +51,7 @@ def _admin(actor: DemoActor, db: Session, action: str, policy_id: str | None = N
 def _draft_response(row: PolicyDraft) -> PolicyDraftResponse:
     return PolicyDraftResponse(id=row.id, policy_id=row.policy_id, version=row.version, title=row.title,
         action_type=row.action_type,
+        policy_scope=row.policy_scope, scope_product_id=row.scope_product_id,
         customer_tier=row.customer_tier, max_discount_pct=row.max_discount_pct,
         review_max_discount_pct=row.review_max_discount_pct, exception_approval_allowed=row.exception_approval_allowed,
         status=row.status, source=row.source)
@@ -101,7 +102,7 @@ def edit_policy_draft(draft_id: str, body: PolicyDraftUpdate, actor: DemoActor =
         raise HTTPException(status_code=422, detail={"code": "INVALID_REVIEW_LIMIT", "message": "Review limit must exceed the direct discount limit."})
     if not body.exception_approval_allowed and body.review_max_discount_pct is not None:
         raise HTTPException(status_code=422, detail={"code": "UNUSED_REVIEW_LIMIT", "message": "Set the review limit only when manager approval exceptions are enabled."})
-    for field in ("title", "action_type", "customer_tier", "max_discount_pct", "review_max_discount_pct", "exception_approval_allowed"):
+    for field in ("title", "action_type", "policy_scope", "scope_product_id", "customer_tier", "max_discount_pct", "review_max_discount_pct", "exception_approval_allowed"):
         setattr(row, field, getattr(body, field))
     add_policy_audit_event(db, actor, "policy_draft_updated", "SUCCESS", policy_id=row.policy_id, version=row.version)
     db.commit()
@@ -123,13 +124,20 @@ def activate_draft(draft_id: str, actor: DemoActor = Depends(get_current_actor),
         _deny_policy_action(db, actor, "policy_draft_activated", "POLICY_RULES_INCOMPLETE", "Confirm structured discount rules before activation.", policy_id=row.policy_id, version=row.version)
     if row.action_type == "reference_only" and (row.max_discount_pct is not None or row.review_max_discount_pct is not None or row.exception_approval_allowed):
         _deny_policy_action(db, actor, "policy_draft_activated", "POLICY_ACTION_MISMATCH", "Reference-only policies cannot carry executable discount rules.", policy_id=row.policy_id, version=row.version)
+    if row.policy_scope == "product_specific" and db.scalar(select(Product.id).where(
+        Product.id == row.scope_product_id, Product.tenant_id == actor.tenant_id,
+    )) is None:
+        _deny_policy_action(db, actor, "policy_draft_activated", "POLICY_SCOPE_PRODUCT_NOT_FOUND", "The scoped product does not exist in this tenant.", policy_id=row.policy_id, version=row.version)
     duplicate = db.scalar(select(Policy).where(Policy.tenant_id == actor.tenant_id, Policy.policy_id == row.policy_id, Policy.version == row.version))
     if duplicate:
         _deny_policy_action(db, actor, "policy_draft_activated", "POLICY_VERSION_EXISTS", "This policy ID and version already exist.", policy_id=row.policy_id, version=row.version)
     siblings = db.scalars(select(Policy).where(Policy.tenant_id == actor.tenant_id, Policy.policy_id == row.policy_id)).all()
     if any(item.action_type != row.action_type for item in siblings):
         _deny_policy_action(db, actor, "policy_draft_activated", "POLICY_ACTION_MISMATCH", "Versions of one policy ID must share an action scope.", policy_id=row.policy_id, version=row.version)
+    if any(item.policy_scope != row.policy_scope or item.scope_product_id != row.scope_product_id for item in siblings):
+        _deny_policy_action(db, actor, "policy_draft_activated", "POLICY_SCOPE_MISMATCH", "Versions of one policy ID must keep the same applicability scope.", policy_id=row.policy_id, version=row.version)
     policy = Policy(policy_id=row.policy_id, version=row.version, title=row.title, action_type=row.action_type, status="inactive",
+        policy_scope=row.policy_scope, scope_product_id=row.scope_product_id,
         customer_tier=row.customer_tier, max_discount_pct=row.max_discount_pct,
         review_max_discount_pct=row.review_max_discount_pct, exception_approval_allowed=row.exception_approval_allowed,
         effective_from=datetime.now(timezone.utc), source=row.source, tenant_id=actor.tenant_id)
@@ -144,6 +152,7 @@ def activate_draft(draft_id: str, actor: DemoActor = Depends(get_current_actor),
 
 @router.post("/policy-diffs", response_model=PolicyDiffResponse)
 def compare_policies(body: PolicyDiffRequest, actor: DemoActor = Depends(get_current_actor), db: Session = Depends(get_db)):
+    require_capability(actor, "policy.diff", code="POLICY_DIFF_ROLE_REQUIRED", message="This role cannot compare policy versions.")
     customer = db.get(Customer, actor.customer_id) if actor.customer_id else None
     try:
         parsed = _parse_intent({"raw_inquiry": body.inquiry, "events": []})
@@ -172,7 +181,7 @@ def compare_policies(body: PolicyDiffRequest, actor: DemoActor = Depends(get_cur
                                      policy_version=policy.version, human_message="This policy does not apply to the trusted demo actor or requested product.")
             breakdown = None
         else:
-            decision, breakdown = evaluate_quote(actor, customer, product, policy, proposal)
+            decision, breakdown = evaluate_quote(actor, customer, product, policy, proposal, intent.policy_scope)
         return PolicyDiffSide(policy_id=policy.policy_id, version=policy.version, title=policy.title,
                               citation=policy.source, decision=decision, breakdown=breakdown)
     return PolicyDiffResponse(intent=intent, base=side(base), compare=side(compare))

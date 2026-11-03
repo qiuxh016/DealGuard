@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.db.models import DemoActor, PolicyAuditEvent
 from app.services.actors import get_current_actor
+from app.services.permissions import require_capability
 
 router = APIRouter(prefix="/audit", tags=["audit"])
 
@@ -23,8 +24,7 @@ def list_policy_audit_events(
     actor: DemoActor = Depends(get_current_actor),
     db: Session = Depends(get_db),
 ):
-    if actor.role != "admin":
-        raise HTTPException(status_code=403, detail={"code": "AUDIT_ROLE_REQUIRED", "message": "Only the demo admin can view policy management audit events."})
+    require_capability(actor, "audit.read", code="AUDIT_ROLE_REQUIRED", message="Only the demo admin can view policy management audit events.")
     if created_from and created_to and created_from > created_to:
         raise HTTPException(status_code=422, detail={"code": "INVALID_TIME_RANGE", "message": "created_from must be earlier than created_to."})
     query = select(PolicyAuditEvent).where(PolicyAuditEvent.tenant_id == actor.tenant_id)

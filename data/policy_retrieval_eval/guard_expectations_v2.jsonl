@@ -1,0 +1,4 @@
+{"case_id":"v2-loyalty-en-holdout","expected_reason_code":"MANAGER_APPROVAL_REQUIRED"}
+{"case_id":"v2-season-en-holdout","expected_reason_code":"MANAGER_APPROVAL_REQUIRED"}
+{"case_id":"v2-loyalty-zh-holdout","expected_reason_code":"MANAGER_APPROVAL_REQUIRED"}
+{"case_id":"v2-season-zh-holdout","expected_reason_code":"MANAGER_APPROVAL_REQUIRED"}

@@ -5,17 +5,19 @@ import Link from "next/link";
 import "./workspace.css";
 
 type Actor = "sales_a" | "sales_b" | "admin" | "manager";
+type PolicyScope = "general" | "bulk_order" | "loyalty" | "early_payment" | "seasonal_campaign" | "product_specific";
 type Policy = {
   id: string; policy_id: string; version: string; title: string; action_type: "quote_discount" | "reference_only"; status: "active" | "inactive";
+  policy_scope: PolicyScope; scope_product_id: string | null;
   max_discount_pct: string | null; review_max_discount_pct: string | null; exception_approval_allowed: boolean; source: string;
 };
 type Approval = { id: string; run_id: string; applicant_actor_id: string; customer_id: string; product_id: string; quantity: number; discount_pct: string; policy_id: string; policy_version: string; state: string };
-type PolicyDraft = { id: string; policy_id: string; version: string; title: string; source: string; action_type: "quote_discount" | "reference_only" | null; max_discount_pct: string | null; review_max_discount_pct: string | null; exception_approval_allowed: boolean; status: string };
+type PolicyDraft = { id: string; policy_id: string; version: string; title: string; source: string; action_type: "quote_discount" | "reference_only" | null; policy_scope: PolicyScope; scope_product_id: string | null; max_discount_pct: string | null; review_max_discount_pct: string | null; exception_approval_allowed: boolean; status: string };
 type RunResult = {
   run_id: string; status: "completed" | "needs_input" | "failed"; execution_mode: "llm" | "demo";
-  intent?: { product_id?: string | null; quantity?: number | null; requested_discount_pct?: string | null } | null;
-  decision?: { decision: string; reason_code: string; human_message: string; policy_version?: string | null } | null;
-  quote?: { id: string; status: string; breakdown: { currency: string; unit_price: string; total: string; subtotal: string; discount_amount: string; quantity: number; discount_pct: string }; policy_id: string; policy_version: string } | null;
+  intent?: { product_id?: string | null; quantity?: number | null; requested_discount_pct?: string | null; policy_scope?: PolicyScope | null; items?: { product_id: string; quantity: number; requested_discount_pct: string }[] } | null;
+  decision?: { decision: string; reason_code: string; human_message: string; policy_version?: string | null; suggested_discount_pct?: string | null; suggested_product_id?: string | null } | null;
+  quote?: { id: string; status: string; breakdown: { currency: string; unit_price: string; total: string; subtotal: string; discount_amount: string; quantity: number; discount_pct: string }; policy_id: string; policy_version: string; lines?: { product_id: string; product_name: string; quantity: number; unit_price: string; discount_pct: string; total: string; policy_id: string; policy_version: string; policy_source: string; available_stock?: number | null; inventory_checked_at?: string | null }[] } | null;
   policy_evidence: { policy_id: string; version: string; title: string; citation: string; source: string; retrieval_mode: string }[];
   trace: { step: string; status: string; message: string; timestamp: string; details?: Record<string, unknown> }[];
   approval_request?: Approval | null; duration_ms?: number | null;
@@ -24,11 +26,17 @@ type RunResult = {
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 const DEMO_MODE = process.env.NODE_ENV !== "production";
 const examples = [
+  { label: "多商品报价", text: "Please quote P-100 10 units at 5%; P-200 4 units at 3%." },
   { label: "正常 VIP 报价", text: "I'm a VIP customer and want to buy 1,000 units of Product A. Can you give me an 8% discount? Please prepare a quote." },
   { label: "检验政策上限", text: "Please prepare a quote for 1,000 units of Product A with a 5% discount." },
   { label: "缺少报价信息", text: "Please prepare a quote for Product A." },
 ];
 const actorLabels: Record<Actor, string> = { sales_a: "Sales A · VIP 客户", sales_b: "Sales B · Standard 客户", admin: "Demo Admin", manager: "Demo Manager" };
+const policyScopeLabels: Record<PolicyScope, string> = { general: "通用折扣", bulk_order: "批量采购", loyalty: "忠诚客户", early_payment: "提前付款", seasonal_campaign: "季节活动", product_specific: "指定商品" };
+const traceLabels: Record<string, string> = {
+  parse_intent: "Parse inquiry", load_business_data: "Business data", retrieve_policy: "Retrieve policy",
+  validate_proposal: "Guard validation", create_quote_draft: "Create draft", request_approval: "Manager review",
+};
 
 async function apiRequest<T>(path: string, actor: Actor, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
@@ -45,6 +53,15 @@ async function apiRequest<T>(path: string, actor: Actor, init?: RequestInit): Pr
   return payload as T;
 }
 
+function inquiryWithSuggestedDiscount(intent: NonNullable<RunResult["intent"]>, productId: string, discount: string): string {
+  const normalizedDiscount = Number(discount).toString();
+  if (intent.items?.length) {
+    return `Please quote ${intent.items.map((item) => `${item.product_id} ${item.quantity} units at ${item.product_id === productId ? normalizedDiscount : item.requested_discount_pct}%`).join("; ")}.`;
+  }
+  if (intent.product_id && intent.quantity) return `Please quote ${intent.product_id} ${intent.quantity} units at ${normalizedDiscount}%.`;
+  return "";
+}
+
 export default function HomePage() {
   const [actor, setActor] = useState<Actor>("sales_a");
   const [authenticated, setAuthenticated] = useState(DEMO_MODE);
@@ -53,6 +70,8 @@ export default function HomePage() {
   const [inquiry, setInquiry] = useState(examples[0].text);
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [result, setResult] = useState<RunResult | null>(null);
+  const [selectedTrace, setSelectedTrace] = useState<number | null>(null);
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [lastQuoteId, setLastQuoteId] = useState<string | null>(null);
   const [lastQuoteOwner, setLastQuoteOwner] = useState<Actor | null>(null);
   const [ownershipCheck, setOwnershipCheck] = useState<{ read: number; update: number } | null>(null);
@@ -65,6 +84,8 @@ export default function HomePage() {
   const [draftVersion, setDraftVersion] = useState("v1");
   const [draftTitle, setDraftTitle] = useState("New VIP discount rule");
   const [draftActionType, setDraftActionType] = useState<"quote_discount" | "reference_only">("quote_discount");
+  const [draftPolicyScope, setDraftPolicyScope] = useState<PolicyScope>("general");
+  const [draftScopeProductId, setDraftScopeProductId] = useState("P-100");
   const [directLimit, setDirectLimit] = useState("5");
   const [reviewLimit, setReviewLimit] = useState("8");
   const [exceptionEnabled, setExceptionEnabled] = useState(true);
@@ -74,6 +95,12 @@ export default function HomePage() {
   const [metrics, setMetrics] = useState<{ run_count: number; allow_count: number; review_count: number; deny_count: number; avg_duration_ms: number | null; p50_duration_ms: number | null; p95_duration_ms: number | null; demo_run_count: number; llm_run_count: number; input_tokens: number | null; output_tokens: number | null } | null>(null);
   const runKeyRef = useRef<{ actor: Actor; inquiry: string; key: string } | null>(null);
   const activePolicy = useMemo(() => policies.find((policy) => policy.status === "active"), [policies]);
+  const decisionTotal = metrics ? metrics.allow_count + metrics.review_count + metrics.deny_count : 0;
+  const decisionShares = metrics && decisionTotal > 0 ? {
+    allow: metrics.allow_count / decisionTotal * 100,
+    review: metrics.review_count / decisionTotal * 100,
+    deny: metrics.deny_count / decisionTotal * 100,
+  } : { allow: 0, review: 0, deny: 0 };
 
   const refreshPolicies = useCallback(async () => {
     try { setPolicies(await apiRequest<Policy[]>("/api/v1/policies", actor)); }
@@ -119,6 +146,8 @@ export default function HomePage() {
     try {
       const next = await apiRequest<RunResult>("/api/v1/runs", actor, { method: "POST", headers: { "Idempotency-Key": key }, body: JSON.stringify({ inquiry }) });
       setResult(next);
+      setSelectedTrace(next.trace.length ? next.trace.length - 1 : null);
+      setEvidenceOpen(false);
       runKeyRef.current = null;
       if (next.quote) { setLastQuoteId(next.quote.id); setLastQuoteOwner(actor); setOwnershipCheck(null); }
     }
@@ -162,7 +191,7 @@ export default function HomePage() {
     setBusy(true);
     try {
       const created = await apiRequest<PolicyDraft>("/api/v1/policy-drafts", actor, { method: "POST", body: form });
-      setPolicyDraft(created); setDraftActionType(created.action_type ?? "quote_discount"); setNotice("政策文本已保存为草稿；它不会直接成为授权规则");
+      setPolicyDraft(created); setDraftActionType(created.action_type ?? "quote_discount"); setDraftPolicyScope(created.policy_scope ?? "general"); setDraftScopeProductId(created.scope_product_id ?? "P-100"); setNotice("政策文本已保存为草稿；它不会直接成为授权规则");
     } catch (error) { setNotice(error instanceof Error ? error.message : "上传失败"); }
     finally { setBusy(false); }
   }
@@ -172,7 +201,10 @@ export default function HomePage() {
     setBusy(true);
     try {
       const body = {
-        title: draftTitle, action_type: draftActionType, customer_tier: "VIP",
+        title: draftTitle, action_type: draftActionType,
+        policy_scope: draftActionType === "quote_discount" ? draftPolicyScope : "general",
+        scope_product_id: draftActionType === "quote_discount" && draftPolicyScope === "product_specific" ? draftScopeProductId : null,
+        customer_tier: "VIP",
         max_discount_pct: draftActionType === "quote_discount" ? Number(directLimit) : null,
         review_max_discount_pct: draftActionType === "quote_discount" && exceptionEnabled ? Number(reviewLimit) : null,
         exception_approval_allowed: draftActionType === "quote_discount" && exceptionEnabled,
@@ -227,6 +259,13 @@ export default function HomePage() {
     const link = document.createElement("a"); link.href = url; link.download = `dealguard-${quoteId}.csv`; link.click(); URL.revokeObjectURL(url);
   }
 
+  async function copyQuoteSummary(quote: NonNullable<RunResult["quote"]>) {
+    try {
+      await navigator.clipboard.writeText(`${quote.id} · ${new Intl.NumberFormat("en-US", { style: "currency", currency: quote.breakdown.currency }).format(Number(quote.breakdown.total))}`);
+      setNotice("报价摘要已复制");
+    } catch { setNotice("复制失败，请检查浏览器剪贴板权限"); }
+  }
+
   if (!authenticated) return <main className="dg-app dg-login-shell"><section className="dg-login-card"><div className="dg-brand-mark" aria-hidden="true">D</div><h1>登录 DealGuard</h1><p>使用管理员提供的账户登录。</p><form onSubmit={signIn} className="dg-login-form"><label>账户 ID<input value={loginId} onChange={(e) => setLoginId(e.target.value)} autoComplete="username" required /></label><label>密码<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required /></label><button className="dg-button" disabled={busy}>登录</button>{notice && <p role="status">{notice}</p>}</form></section></main>;
 
   return (
@@ -273,6 +312,7 @@ export default function HomePage() {
           <div className="dg-metric"><div className="dg-metric-label">执行模式</div><div className="dg-metric-value">Demo {metrics.demo_run_count} / LLM {metrics.llm_run_count}</div></div>
           <div className="dg-metric"><div className="dg-metric-label">Token 用量</div><div className="dg-metric-value">{metrics.input_tokens == null ? "未知（Demo/未提供）" : `${metrics.input_tokens} in / ${metrics.output_tokens ?? 0} out`}</div></div>
         </section>}
+        {(actor === "admin" || actor === "manager") && metrics && <section className="dg-outcome-chart" aria-label="Guard 决策分布"><div><strong>决策分布</strong><span>{decisionTotal.toLocaleString()} 次已判定运行</span></div><div className="dg-outcome-stack" role="img" aria-label={`允许 ${metrics.allow_count}，审批 ${metrics.review_count}，拒绝 ${metrics.deny_count}`}><span className="dg-outcome-allow" style={{ width: `${decisionShares.allow}%` }} /><span className="dg-outcome-review" style={{ width: `${decisionShares.review}%` }} /><span className="dg-outcome-deny" style={{ width: `${decisionShares.deny}%` }} /></div><div className="dg-outcome-legend"><span><i className="dg-legend-allow"/>允许 {metrics.allow_count} · {decisionShares.allow.toFixed(0)}%</span><span><i className="dg-legend-review"/>待审批 {metrics.review_count} · {decisionShares.review.toFixed(0)}%</span><span><i className="dg-legend-deny"/>拒绝 {metrics.deny_count} · {decisionShares.deny.toFixed(0)}%</span></div></section>}
 
         <div className="dg-workspace">
           <section className="dg-panel dg-panel-pad">
@@ -280,8 +320,9 @@ export default function HomePage() {
             <div className="dg-examples">{examples.map((example) => <button type="button" key={example.label} onClick={() => setInquiry(example.text)} aria-pressed={inquiry === example.text} className={`dg-example ${inquiry === example.text ? "dg-example-active" : ""}`}>{example.label}</button>)}</div>
             <form onSubmit={runInquiry} aria-busy={busy}>
               <label htmlFor="inquiry" className="dg-field-label">询盘内容</label>
-              <textarea id="inquiry" value={inquiry} onChange={(event) => setInquiry(event.target.value)} rows={8} className="dg-textarea" placeholder="Tell us the product, quantity and requested discount..." />
-              <button type="submit" disabled={busy || !inquiry.trim()} className="dg-button dg-button-primary">{busy && <span className="dg-spinner" aria-hidden="true" />}{busy ? "正在分析询盘…" : "运行询盘"}</button>
+              <textarea id="inquiry" value={inquiry} onChange={(event) => setInquiry(event.target.value)} rows={8} maxLength={10_000} className="dg-textarea" placeholder="Tell us the product, quantity and requested discount..." />
+              <div className="dg-composer-meta"><span>支持单商品或多商品询价</span><span>{inquiry.length.toLocaleString()} / 10,000</span></div>
+              <div className="dg-composer-actions"><button type="submit" disabled={busy || !inquiry.trim()} className="dg-button dg-button-primary">{busy && <span className="dg-spinner" aria-hidden="true" />}{busy ? "正在分析询盘…" : "运行询盘"}</button><button type="button" disabled={busy || !inquiry} onClick={() => { setInquiry(""); setResult(null); }} className="dg-button dg-button-secondary">清空</button></div>
             </form>
             <p className="dg-help">客户等级、商品价格和库存由后端演示数据提供。文本中自报的 VIP 身份不会用于授权。</p>
           </section>
@@ -297,13 +338,18 @@ export default function HomePage() {
                 <span className="dg-decision-code">{result.decision?.reason_code}</span>
               </div>
               <p className="dg-message">{result.decision?.human_message ?? "工作流未返回决策。"}</p>
-              {result.intent && <div className="dg-intent"><div><div className="dg-intent-label">商品</div><div className="dg-intent-value">{result.intent.product_id ?? "—"}</div></div><div><div className="dg-intent-label">数量</div><div className="dg-intent-value">{result.intent.quantity?.toLocaleString() ?? "—"}</div></div><div><div className="dg-intent-label">折扣</div><div className="dg-intent-value">{result.intent.requested_discount_pct ? `${result.intent.requested_discount_pct}%` : "—"}</div></div></div>}
+              {result.decision?.decision === "DENY" && result.decision.reason_code === "DISCOUNT_LIMIT_EXCEEDED" && result.decision.suggested_discount_pct != null && result.decision.suggested_product_id && result.intent && <button type="button" className="dg-button dg-button-secondary" onClick={() => { const revised = inquiryWithSuggestedDiscount(result.intent!, result.decision!.suggested_product_id!, result.decision!.suggested_discount_pct!); if (revised) setInquiry(revised); }}>按政策上限修改询盘（{Number(result.decision.suggested_discount_pct)}%）</button>}
+              {result.intent && <div className="dg-intent"><div><div className="dg-intent-label">商品</div><div className="dg-intent-value">{result.intent.items?.length ? result.intent.items.map((item) => item.product_id).join(" · ") : result.intent.product_id ?? "—"}</div></div><div><div className="dg-intent-label">数量</div><div className="dg-intent-value">{result.intent.items?.length ? `${result.intent.items.length} 项` : result.intent.quantity?.toLocaleString() ?? "—"}</div></div><div><div className="dg-intent-label">折扣</div><div className="dg-intent-value">{result.intent.items?.length ? result.intent.items.map((item) => `${item.product_id} ${item.requested_discount_pct}%`).join(" · ") : result.intent.requested_discount_pct ? `${result.intent.requested_discount_pct}%` : "—"}</div></div><div><div className="dg-intent-label">政策范围</div><div className="dg-intent-value">{result.intent.policy_scope ? policyScopeLabels[result.intent.policy_scope] : "需澄清"}</div></div></div>}
               {result.quote && <div className="dg-quote">
                 <div className="dg-quote-top"><div><div className="dg-quote-label">Quote draft · {result.quote.breakdown.currency}</div><div className="dg-quote-total">{new Intl.NumberFormat("en-US", { style: "currency", currency: result.quote.breakdown.currency }).format(Number(result.quote.breakdown.total))}</div><div className="dg-quote-meta">{result.quote.breakdown.quantity.toLocaleString()} units · {result.quote.breakdown.discount_pct}% discount</div></div><div className="dg-quote-policy">政策版本<strong>{result.quote.policy_id}@{result.quote.policy_version}</strong></div></div>
-                <div className="dg-quote-footer"><span className="dg-quote-id">{result.quote.id}</span>{(actor === "admin" || actor === lastQuoteOwner) && <button onClick={() => void downloadQuoteCsv(result.quote!.id)} className="dg-button dg-button-small dg-button-secondary">导出 CSV</button>}</div>
+                {result.quote.lines && result.quote.lines.length > 1 && <div className="dg-quote-lines">
+                  <div className="dg-table-scroll"><table className="dg-line-table"><thead><tr><th>商品</th><th>数量</th><th>库存校验快照</th><th>单价</th><th>折扣</th><th>金额</th></tr></thead><tbody>{result.quote.lines.map((line) => <tr key={line.product_id}><td><strong>{line.product_name}</strong><span>{line.product_id}</span><details className="dg-line-policy"><summary>{line.policy_id}@{line.policy_version} · 查看依据</summary><p>{line.policy_source}</p></details></td><td>{line.quantity.toLocaleString()}</td><td>{line.available_stock == null ? "旧记录无快照" : <>{line.available_stock.toLocaleString()} 可用<br/><small>{line.inventory_checked_at ? new Date(line.inventory_checked_at).toLocaleString() : "校验时间未知"}</small></>}</td><td>{new Intl.NumberFormat("en-US", { style: "currency", currency: result.quote!.breakdown.currency }).format(Number(line.unit_price))}</td><td>{line.discount_pct}%</td><td className="dg-line-total">{new Intl.NumberFormat("en-US", { style: "currency", currency: result.quote!.breakdown.currency }).format(Number(line.total))}</td></tr>)}</tbody></table></div>
+                  <div className="dg-line-chart" aria-label="各商品金额对比"><div className="dg-chart-heading"><span>明细金额对比</span><span>{result.quote.breakdown.currency}</span></div>{result.quote.lines.map((line) => { const amount = Number(line.total); const max = Math.max(...result.quote!.lines!.map((item) => Number(item.total)), 1); return <div className="dg-chart-row" key={line.product_id}><span>{line.product_id}</span><div className="dg-chart-track"><div className="dg-chart-fill" style={{ width: `${Math.max(amount / max * 100, 2)}%` }} /></div><strong>{new Intl.NumberFormat("en-US", { style: "currency", currency: result.quote!.breakdown.currency }).format(amount)}</strong></div>; })}</div>
+                </div>}
+                <div className="dg-quote-footer"><span className="dg-quote-id">{result.quote.id}</span><div className="dg-quote-actions">{(actor === "admin" || actor === lastQuoteOwner) && <button onClick={() => void copyQuoteSummary(result.quote!)} className="dg-button dg-button-small dg-button-secondary">复制摘要</button>}{(actor === "admin" || actor === lastQuoteOwner) && <button onClick={() => void downloadQuoteCsv(result.quote!.id)} className="dg-button dg-button-small dg-button-secondary">导出 CSV</button>}</div></div>
               </div>}
               {result.approval_request && <div className="dg-block"><p className="dg-block-title">经理审批</p><div className="dg-policy-row dg-policy-row-active"><div className="dg-policy-row-top"><strong className="dg-policy-id">{result.approval_request.policy_id}@{result.approval_request.policy_version}</strong><span className="dg-status">待处理</span></div><p className="dg-policy-limit">审批请求已保存；批准前不会生成报价草稿。</p></div></div>}
-              <div className="dg-block"><p className="dg-block-title">Policy evidence</p>{result.policy_evidence.length ? result.policy_evidence.map((evidence) => <div key={evidence.source} className="dg-evidence"><div className="dg-evidence-head"><strong className="dg-evidence-title">{evidence.title}</strong><span className="dg-evidence-source">{evidence.source}</span></div><p className="dg-evidence-copy">{evidence.citation}</p><div className="dg-evidence-mode">Retrieved via {evidence.retrieval_mode}</div></div>) : <p className="dg-help">本次没有适用的政策依据</p>}</div>
+              <div className="dg-block"><details className="dg-evidence-disclosure" open={evidenceOpen} onToggle={(event) => setEvidenceOpen(event.currentTarget.open)}><summary><span>政策证据</span><span>{result.policy_evidence.length} 条 · {evidenceOpen ? "收起" : "展开"}</span></summary>{result.policy_evidence.length ? result.policy_evidence.map((evidence) => <div key={evidence.source} className="dg-evidence"><div className="dg-evidence-head"><strong className="dg-evidence-title">{evidence.title}</strong><span className="dg-evidence-source">{evidence.source}</span></div><p className="dg-evidence-copy">{evidence.citation}</p><div className="dg-evidence-mode">Retrieved via {evidence.retrieval_mode}</div></div>) : <p className="dg-help">本次没有适用的政策依据</p>}</details></div>
               {lastQuoteId && <div className="dg-block"><div className="dg-policy-row"><div className="dg-policy-row-top"><strong className="dg-policy-id">资源归属检查</strong><button onClick={tryUnauthorizedQuoteAccess} disabled={busy} className="dg-button dg-button-small dg-button-secondary">模拟越权操作</button></div><p className="dg-policy-limit">使用 Sales B 尝试读取并修改最近一份报价草稿。</p>{ownershipCheck && <p role="status" className="dg-help">已拦截：读取 HTTP {ownershipCheck.read}，修改 HTTP {ownershipCheck.update}。报价内容未改变。</p>}</div></div>}
             </div>}
           </section>
@@ -313,7 +359,7 @@ export default function HomePage() {
               <div className="dg-panel-heading"><div><div className="dg-kicker">03 · Policy center</div><h2>政策版本</h2></div></div>
               <div className="dg-policy-list">{policies.map((policy) => <article key={policy.id} className={`dg-policy-row ${policy.status === "active" ? "dg-policy-row-active" : ""}`}>
                 <div className="dg-policy-row-top"><strong className="dg-policy-id">{policy.policy_id}@{policy.version}</strong><span className={`dg-status ${policy.status === "active" ? "dg-status-active" : ""}`}>{policy.status}</span></div>
-                <p className="dg-policy-limit">{policy.action_type === "quote_discount" ? <>折扣报价 · 直接上限 <strong>{policy.max_discount_pct}%</strong>{policy.review_max_discount_pct && <> · 审批上限 <strong>{policy.review_max_discount_pct}%</strong></>}</> : "仅供检索参考，不授权报价"}</p>
+                <p className="dg-policy-limit">{policy.action_type === "quote_discount" ? <>{policyScopeLabels[policy.policy_scope]}{policy.scope_product_id ? ` · ${policy.scope_product_id}` : ""} · 直接上限 <strong>{policy.max_discount_pct}%</strong>{policy.review_max_discount_pct && <> · 审批上限 <strong>{policy.review_max_discount_pct}%</strong></>}</> : "仅供检索参考，不授权报价"}</p>
                 {actor === "admin" && policy.status !== "active" && <div className="dg-policy-actions"><button onClick={() => activatePolicy(policy)} disabled={busy} className="dg-button dg-button-small dg-button-secondary">激活此版本</button></div>}
               </article>)}</div>
               {actor !== "admin" && <p className="dg-policy-only-admin">仅 Demo Admin 可以激活预置版本。</p>}
@@ -324,7 +370,7 @@ export default function HomePage() {
                 <button disabled={busy} className="dg-button dg-button-small dg-button-secondary">保存来源草稿</button>
               </form>}
               {actor === "admin" && policyDraft && <div className="dg-upload"><h3>{policyDraft.policy_id}@{policyDraft.version} · {policyDraft.status}</h3>
-                <div className="dg-rule-fields"><label>政策标题<input aria-label="政策标题" value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} className="dg-control"/></label><label>授权范围<select aria-label="政策动作范围" value={draftActionType} onChange={(event) => setDraftActionType(event.target.value as "quote_discount" | "reference_only")} className="dg-control"><option value="quote_discount">折扣报价规则</option><option value="reference_only">仅供检索参考</option></select></label>{draftActionType === "quote_discount" && <><label>直接折扣上限 %<input type="number" min="0" max="100" value={directLimit} onChange={(event) => setDirectLimit(event.target.value)} className="dg-control"/></label><label className="dg-checkbox"><input type="checkbox" checked={exceptionEnabled} onChange={(event) => setExceptionEnabled(event.target.checked)}/>允许例外审批</label>{exceptionEnabled && <label>审批折扣上限 %<input type="number" min="0" max="100" value={reviewLimit} onChange={(event) => setReviewLimit(event.target.value)} className="dg-control"/></label>}</>}</div>
+                <div className="dg-rule-fields"><label>政策标题<input aria-label="政策标题" value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} className="dg-control"/></label><label>授权范围<select aria-label="政策动作范围" value={draftActionType} onChange={(event) => setDraftActionType(event.target.value as "quote_discount" | "reference_only")} className="dg-control"><option value="quote_discount">折扣报价规则</option><option value="reference_only">仅供检索参考</option></select></label>{draftActionType === "quote_discount" && <><label>适用政策类型<select aria-label="政策适用类型" value={draftPolicyScope} onChange={(event) => setDraftPolicyScope(event.target.value as PolicyScope)} className="dg-control">{Object.entries(policyScopeLabels).map(([scope, label]) => <option key={scope} value={scope}>{label}</option>)}</select></label>{draftPolicyScope === "product_specific" && <label>适用商品 ID<input aria-label="适用商品 ID" value={draftScopeProductId} onChange={(event) => setDraftScopeProductId(event.target.value.trim().toUpperCase())} className="dg-control"/></label>}<label>直接折扣上限 %<input type="number" min="0" max="100" value={directLimit} onChange={(event) => setDirectLimit(event.target.value)} className="dg-control"/></label><label className="dg-checkbox"><input type="checkbox" checked={exceptionEnabled} onChange={(event) => setExceptionEnabled(event.target.checked)}/>允许例外审批</label>{exceptionEnabled && <label>审批折扣上限 %<input type="number" min="0" max="100" value={reviewLimit} onChange={(event) => setReviewLimit(event.target.value)} className="dg-control"/></label>}</>}</div>
                 <div className="dg-draft-actions"><button onClick={() => void savePolicyDraft(false)} disabled={busy || policyDraft.status === "active"} className="dg-button dg-button-small dg-button-secondary">保存规则</button><button onClick={() => void savePolicyDraft(true)} disabled={busy || policyDraft.status === "active"} className="dg-button dg-button-small">保存并激活</button></div>
               </div>}
 
@@ -335,11 +381,11 @@ export default function HomePage() {
               </div>
             </section>
 
-            <section className="dg-panel dg-panel-pad"><div className="dg-panel-heading"><div><div className="dg-kicker">04 · Trace</div><h2>运行轨迹</h2></div></div>
-              {!result?.trace.length ? <p className="dg-help">运行后的程序事件会显示在这里。</p> : <ol className="dg-trace">{result.trace.map((event, index) => <li key={`${event.step}-${index}`} className="dg-trace-item"><span className="dg-trace-dot"/><div><div className="dg-trace-top"><strong className="dg-trace-step">{event.step.replaceAll("_", " ")}</strong><span className="dg-trace-status">{event.status}</span>{typeof event.details?.duration_ms === "number" && <span className="dg-trace-status">{event.details.duration_ms} ms</span>}</div><p className="dg-trace-message">{event.message}</p></div></li>)}</ol>}
-            </section>
           </aside>
         </div>
+        <section className="dg-panel dg-panel-pad dg-trace-panel"><div className="dg-panel-heading"><div><div className="dg-kicker">04 · Trace</div><h2>运行轨迹</h2></div>{result?.duration_ms != null && <span className="dg-trace-total">{result.duration_ms} ms 总耗时</span>}</div>
+          {!result?.trace.length ? <p className="dg-help">运行后的程序事件会显示在这里。</p> : <><ol className="dg-trace dg-trace-interactive" aria-label="工作流阶段">{result.trace.map((event, index) => <li key={`${event.step}-${index}`} className={`dg-trace-item ${selectedTrace === index ? "dg-trace-selected" : ""}`}><button type="button" className="dg-trace-button" aria-expanded={selectedTrace === index} onClick={() => setSelectedTrace(selectedTrace === index ? null : index)}><span className="dg-trace-dot">{index + 1}</span><span className="dg-trace-content"><span className="dg-trace-top"><strong className="dg-trace-step">{traceLabels[event.step] ?? event.step.replaceAll("_", " ")}</strong><span className="dg-trace-status">{event.status}</span></span>{typeof event.details?.duration_ms === "number" && <span className="dg-trace-duration">{event.details.duration_ms} ms</span>}</span></button></li>)}</ol><p className="dg-trace-hint">点选步骤查看事件详情{result.trace.length > 4 ? " · 横向滑动查看完整轨迹" : ""}</p>{selectedTrace != null && result.trace[selectedTrace] && <div className="dg-trace-detail"><div><strong>{traceLabels[result.trace[selectedTrace].step] ?? result.trace[selectedTrace].step.replaceAll("_", " ")}</strong><span>{result.trace[selectedTrace].timestamp ? new Date(result.trace[selectedTrace].timestamp).toLocaleTimeString() : ""}</span></div><p>{result.trace[selectedTrace].message}</p>{Object.keys(result.trace[selectedTrace].details ?? {}).length > 0 && <pre>{JSON.stringify(result.trace[selectedTrace].details, null, 2)}</pre>}</div>}</>}
+        </section>
         <footer className="dg-footer"><p>HarborLight Trading · USD · simulated business data</p><p>{result ? `Run ${result.run_id} · ${result.execution_mode === "demo" ? "Deterministic Demo" : "Configured LLM"}` : "Retrieval informs decisions; deterministic policies authorize actions."}</p></footer>
       </div>
     </main>

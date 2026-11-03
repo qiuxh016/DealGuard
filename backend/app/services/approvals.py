@@ -11,10 +11,11 @@ from app.db.models import ApprovalRequest, Customer, DemoActor, Policy, Product,
 from app.guards.business_rules import calculate_breakdown, evaluate_quote
 from app.schemas.deal import ActionProposal, ApprovalOutcome, ApprovalRequestResponse, QuoteBreakdown, TraceEvent
 from app.services.quotes import quote_response
+from app.services.permissions import has_capability
 
 
 def _manager(actor: DemoActor) -> None:
-    if actor.role != "manager":
+    if not has_capability(actor, "approvals.decide"):
         raise HTTPException(status_code=403, detail={"code": "MANAGER_REQUIRED", "message": "Only the demo manager can process approvals."})
 
 
@@ -99,18 +100,60 @@ def process_approval(db: Session, actor: DemoActor, approval_id: str, approve: b
 
     applicant = db.get(DemoActor, row.applicant_actor_id)
     customer = db.scalar(select(Customer).where(Customer.id == row.customer_id, Customer.tenant_id == actor.tenant_id))
+    if row.lines:
+        current_lines = []
+        stale_code = None
+        now = datetime.now(timezone.utc)
+        if applicant is None or not has_capability(applicant, "inquiry.run") or applicant.customer_id != row.customer_id or customer is None:
+            stale_code = "APPROVAL_CONTEXT_CHANGED"
+        for saved in row.lines:
+            if stale_code:
+                break
+            proposal_data = saved["proposal"]
+            product = db.scalar(select(Product).where(Product.id == proposal_data["product_id"], Product.tenant_id == actor.tenant_id))
+            policies = db.scalars(select(Policy).where(Policy.tenant_id == actor.tenant_id, Policy.policy_id == saved["policy_id"], Policy.action_type == "quote_discount", Policy.customer_tier == customer.tier, Policy.status == "active")).all()
+            current = next((p for p in policies if (p.effective_from.replace(tzinfo=timezone.utc) if p.effective_from.tzinfo is None else p.effective_from) <= now and (p.effective_to is None or (p.effective_to.replace(tzinfo=timezone.utc) if p.effective_to.tzinfo is None else p.effective_to) > now)), None)
+            if product is None:
+                stale_code = "APPROVAL_CONTEXT_CHANGED"
+            elif current is None or current.version != saved["policy_version"]:
+                stale_code = "POLICY_CHANGED"
+            else:
+                proposal = ActionProposal(**proposal_data)
+                decision, breakdown = evaluate_quote(applicant, customer, product, current, proposal, row.policy_scope)
+                if decision.decision not in {"ALLOW", "REVIEW"}:
+                    stale_code = decision.reason_code
+                elif breakdown is None:
+                    breakdown = calculate_breakdown(product, proposal.quantity, proposal.requested_discount_pct)
+                current_lines.append({"product_id": product.id, "product_name": product.name, "currency": product.currency, "quantity": proposal.quantity, "unit_price": str(product.unit_price), "discount_pct": str(proposal.requested_discount_pct), "subtotal": str(breakdown.subtotal), "discount_amount": str(breakdown.discount_amount), "total": str(breakdown.total), "policy_id": current.policy_id, "policy_version": current.version, "policy_source": current.source, "policy_scope": current.policy_scope, "available_stock": product.stock, "inventory_checked_at": now.isoformat()})
+        if stale_code:
+            if not _transition_pending(db, row, "STALE", actor.id, stale_code):
+                return _approval_conflict(db, approval_id, approve)
+            trace = _trace(db, row, "stale", "Business context changed; the request is stale and no quote was created.", stale_code)
+            db.commit(); db.refresh(row)
+            return ApprovalOutcome(approval=ApprovalRequestResponse.model_validate(row, from_attributes=True), trace=trace)
+        if not _transition_pending(db, row, "APPROVED", actor.id):
+            return _approval_conflict(db, approval_id, approve)
+        first = current_lines[0]
+        subtotal = sum((Decimal(line["subtotal"]) for line in current_lines), Decimal("0"))
+        discount_amount = sum((Decimal(line["discount_amount"]) for line in current_lines), Decimal("0"))
+        total = sum((Decimal(line["total"]) for line in current_lines), Decimal("0"))
+        quote = QuoteDraft(tenant_id=actor.tenant_id, owner_actor_id=applicant.id, customer_id=customer.id, product_id=first["product_id"], quantity=sum(line["quantity"] for line in current_lines), unit_price=Decimal(first["unit_price"]), discount_pct=Decimal(first["discount_pct"]), subtotal=subtotal, discount_amount=discount_amount, total=total, policy_id=first["policy_id"], policy_version=first["policy_version"], policy_scope=row.policy_scope, lines=current_lines, status="DRAFT")
+        db.add(quote); db.flush(); row.quote_id = quote.id
+        trace = _trace(db, row, "approved", "Manager approved after revalidating every line.", "APPROVAL_APPROVED")
+        db.commit(); db.refresh(row); db.refresh(quote)
+        return ApprovalOutcome(approval=ApprovalRequestResponse.model_validate(row, from_attributes=True), quote=quote_response(quote), trace=trace)
     product = db.scalar(select(Product).where(Product.id == row.product_id, Product.tenant_id == actor.tenant_id))
     policies = db.scalars(select(Policy).where(Policy.tenant_id == actor.tenant_id, Policy.policy_id == row.policy_id, Policy.action_type == "quote_discount", Policy.customer_tier == (customer.tier if customer else ""), Policy.status == "active")).all()
     now = datetime.now(timezone.utc)
     current = next((p for p in policies if (p.effective_from.replace(tzinfo=timezone.utc) if p.effective_from.tzinfo is None else p.effective_from) <= now and (p.effective_to is None or (p.effective_to.replace(tzinfo=timezone.utc) if p.effective_to.tzinfo is None else p.effective_to) > now)), None)
     stale_code = None
-    if applicant is None or applicant.role != "sales" or applicant.customer_id != row.customer_id or customer is None or product is None:
+    if applicant is None or not has_capability(applicant, "inquiry.run") or applicant.customer_id != row.customer_id or customer is None or product is None:
         stale_code = "APPROVAL_CONTEXT_CHANGED"
     elif current is None or current.version != row.policy_version:
         stale_code = "POLICY_CHANGED"
     else:
         proposal = ActionProposal(customer_id=row.customer_id, product_id=row.product_id, quantity=row.quantity, requested_discount_pct=row.discount_pct)
-        decision, breakdown = evaluate_quote(applicant, customer, product, current, proposal)
+        decision, breakdown = evaluate_quote(applicant, customer, product, current, proposal, row.policy_scope)
         if decision.decision not in {"ALLOW", "REVIEW"}:
             stale_code = decision.reason_code
         elif breakdown is None:
@@ -132,6 +175,7 @@ def process_approval(db: Session, actor: DemoActor, approval_id: str, approve: b
         quantity=row.quantity, unit_price=product.unit_price, discount_pct=row.discount_pct,
         subtotal=breakdown.subtotal, discount_amount=breakdown.discount_amount, total=breakdown.total,
         policy_id=current.policy_id, policy_version=current.version, status="DRAFT",
+        policy_scope=row.policy_scope,
     )
     db.add(quote)
     db.flush()
