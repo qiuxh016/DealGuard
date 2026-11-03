@@ -46,6 +46,7 @@ def test_run_history_filters_and_sales_scope(client):
 def test_policy_audit_history_is_admin_only_and_tenant_scoped(client):
     with client.app.state.session_factory() as db:
         db.add(Tenant(id="history-other-tenant", name="History other tenant"))
+        db.flush()
         db.add_all([
             PolicyAuditEvent(tenant_id="harborlight-demo", actor_id="admin", action="policy_draft_updated",
                              outcome="SUCCESS", policy_id="DISCOUNT-02", version="v2"),

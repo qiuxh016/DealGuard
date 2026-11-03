@@ -116,6 +116,7 @@ def test_policy_list_is_scoped_to_authenticated_tenant(client):
     factory = client.app.state.session_factory
     with factory() as db:
         db.add(Tenant(id="other-tenant", name="Other"))
+        db.flush()
         source = db.query(Policy).filter_by(version="v1").one()
         db.add(Policy(policy_id="OTHER", version="v1", title="Other tenant policy", status="active",
                       customer_tier=source.customer_tier, max_discount_pct=source.max_discount_pct,

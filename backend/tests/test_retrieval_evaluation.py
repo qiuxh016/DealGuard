@@ -65,8 +65,10 @@ def retrieval_corpus(client):
         db.add_all([
             Tenant(id=tenant_id, name="Retrieval evaluation tenant"),
             Tenant(id="other-tenant", name="Other tenant"),
-            Customer(id="C-RETRIEVAL", name="Retrieval Evaluation Customer", tier="VIP", tenant_id=tenant_id),
         ])
+        db.flush()
+        db.add(Customer(id="C-RETRIEVAL", name="Retrieval Evaluation Customer", tier="VIP", tenant_id=tenant_id))
+        db.flush()
         db.add_all([
             _policy("DISCOUNT-TEST", "Discount terms", POLICY_DOCUMENTS["DISCOUNT-TEST"], tenant_id=tenant_id),
             _policy("RETURNS-TEST", "Returns and refunds", POLICY_DOCUMENTS["RETURNS-TEST"], tenant_id=tenant_id),

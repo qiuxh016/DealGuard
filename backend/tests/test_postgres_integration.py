@@ -1,4 +1,5 @@
 from pathlib import Path
+from uuid import uuid4
 
 from alembic import command
 from alembic.config import Config
@@ -12,6 +13,40 @@ from app.main import app
 
 
 pytestmark = pytest.mark.skipif(engine.dialect.name != "postgresql", reason="PostgreSQL integration check requires DATABASE_URL to use PostgreSQL")
+
+
+def test_postgres_registration_and_invitation_respect_foreign_keys():
+    suffix = uuid4().hex
+    with TestClient(app) as client:
+        registered = client.post("/api/v1/auth/register", json={
+            "organization_name": "Registration FK Check",
+            "display_name": "Workspace Admin",
+            "email": f"admin-{suffix}@example.test",
+            "password": "a-secure-password-123",
+        })
+        assert registered.status_code == 201, registered.text
+        admin = registered.json()
+
+        invitation = client.post("/api/v1/auth/invitations", json={
+            "email": f"manager-{suffix}@example.test",
+            "role": "manager",
+        })
+        assert invitation.status_code == 201, invitation.text
+
+        accepted = client.post("/api/v1/auth/accept-invitation", json={
+            "token": invitation.json()["token"],
+            "display_name": "Workspace Manager",
+            "password": "another-secure-password-456",
+        })
+        assert accepted.status_code == 201, accepted.text
+        manager = accepted.json()
+
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT id FROM tenants WHERE id = :id"), {"id": admin["tenant_id"]}).scalar_one()
+        assert connection.execute(text("SELECT id FROM demo_actors WHERE id = :id"), {"id": admin["actor_id"]}).scalar_one()
+        assert connection.execute(text("SELECT actor_id FROM auth_accounts WHERE actor_id = :id"), {"id": admin["actor_id"]}).scalar_one()
+        assert connection.execute(text("SELECT id FROM demo_actors WHERE id = :id"), {"id": manager["actor_id"]}).scalar_one()
+        assert connection.execute(text("SELECT actor_id FROM auth_accounts WHERE actor_id = :id"), {"id": manager["actor_id"]}).scalar_one()
 
 
 def test_postgres_quote_write_and_demo_reset():

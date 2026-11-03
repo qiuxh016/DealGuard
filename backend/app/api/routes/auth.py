@@ -160,8 +160,12 @@ def register(body: RegistrationRequest, request: Request, response: Response, db
     tenant = Tenant(id=tenant_id, name=body.organization_name)
     actor = DemoActor(id=actor_id, display_name=body.display_name, role="admin", customer_id=None, tenant_id=tenant_id)
     account = AuthAccount(actor_id=actor_id, email=body.email, password_hash=hash_password(body.password), is_active=True)
-    db.add_all([tenant, actor, account])
     try:
+        db.add(tenant)
+        db.flush()
+        db.add(actor)
+        db.flush()
+        db.add(account)
         db.flush()
     except IntegrityError as error:
         db.rollback()
@@ -338,9 +342,11 @@ def accept_invitation(body: InvitationAccept, response: Response, db: Session = 
     actor_id = str(uuid4())
     member = DemoActor(id=actor_id, display_name=body.display_name, role=row.role, customer_id=row.customer_id, tenant_id=row.tenant_id)
     account = AuthAccount(actor_id=actor_id, email=row.email, password_hash=hash_password(body.password), is_active=True)
-    row.accepted_at = now
-    db.add_all([member, account])
     try:
+        db.add(member)
+        db.flush()
+        db.add(account)
+        row.accepted_at = now
         db.flush()
     except IntegrityError as error:
         db.rollback()

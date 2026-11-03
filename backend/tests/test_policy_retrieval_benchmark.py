@@ -26,6 +26,7 @@ def multi_policy_corpus(client, monkeypatch):
         for row in db.scalars(select(Policy).where(Policy.tenant_id == "harborlight-demo")).all():
             row.status = "inactive"
         db.add(Tenant(id="retrieval-decoy-tenant", name="Retrieval decoy"))
+        db.flush()
         for item in POLICIES:
             db.add(Policy(
                 policy_id=item["policy_id"], version=item["version"], title=item["title"],
