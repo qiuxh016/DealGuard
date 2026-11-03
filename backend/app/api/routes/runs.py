@@ -197,7 +197,7 @@ def create_run(
             approval = ApprovalRequest(
                 run_id=run_id, applicant_actor_id=actor.id, customer_id=proposal["customer_id"],
                 tenant_id=actor.tenant_id,
-                product_id=proposal["product_id"], quantity=proposal["quantity"],
+                product_key=state["products"][0].internal_id, product_id=proposal["product_id"], quantity=proposal["quantity"],
                 discount_pct=proposal["requested_discount_pct"], policy_id=response.decision.policy_id,
                 policy_version=response.decision.policy_version, policy_scope=(state.get("intent") or {}).get("policy_scope") or "general",
                 state="PENDING", reason=response.decision.reason_code,
@@ -310,6 +310,19 @@ def get_run(
     db: Session = Depends(get_db),
 ) -> RunResponse:
     record = db.scalar(select(RunRecord).where(RunRecord.id == run_id, RunRecord.tenant_id == actor.tenant_id))
-    if record is None or (not has_capability(actor, "runs.read_all") and (not has_capability(actor, "runs.read_own") or record.actor_id != actor.id)):
+    is_admin = has_capability(actor, "runs.read_all")
+    is_tenant_reader = has_capability(actor, "runs.read_tenant")
+    is_owner = has_capability(actor, "runs.read_own") and record is not None and record.actor_id == actor.id
+    if record is None or (not is_admin and not is_tenant_reader and not is_owner):
         raise HTTPException(status_code=404, detail={"code": "RUN_NOT_FOUND", "message": "Run not found."})
-    return RunResponse(run_id=record.id, **record.result)
+    result = record.result
+    if is_tenant_reader and not is_admin:
+        result = {**result}
+        if result.get("intent"):
+            result["intent"] = {**result["intent"], "customer_message": "[redacted for tenant-level access]"}
+        safe_detail_keys = {"reason_code", "policy_id", "policy_version", "line_count", "product_id", "requested_quantity", "available_stock", "approval_id"}
+        result["trace"] = [
+            {**event, "details": {key: value for key, value in (event.get("details") or {}).items() if key in safe_detail_keys}}
+            for event in result.get("trace", [])
+        ]
+    return RunResponse(run_id=record.id, **result)

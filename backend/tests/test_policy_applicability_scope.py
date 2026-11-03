@@ -29,7 +29,7 @@ def test_guard_rejects_policy_scope_mismatch_without_writing(client):
     with client.app.state.session_factory() as db:
         actor = db.get(DemoActor, "sales_a")
         customer = db.get(Customer, "C-001")
-        product = db.get(Product, "P-100")
+        product = db.scalar(select(Product).where(Product.id == "P-100"))
         policy = Policy(
             policy_id="BULK-ONLY", version="v1", title="Bulk only", action_type="quote_discount",
             policy_scope="bulk_order", status="active", customer_tier="VIP", max_discount_pct=Decimal("10"),

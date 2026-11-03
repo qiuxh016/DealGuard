@@ -1,9 +1,9 @@
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import URL, create_engine, event
+from sqlalchemy import URL, create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.db.database import Base, get_db
+from app.db.database import Base, enable_sqlite_foreign_keys, get_db
 from app.db import models  # noqa: F401
 from app.db.seed import seed_demo_data
 from app.main import app
@@ -27,12 +27,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "local_embedding_model_path", "")
     engine = create_engine(URL.create("sqlite", database=str(tmp_path / "test.sqlite")), connect_args={"check_same_thread": False})
 
-    @event.listens_for(engine, "connect")
-    def enable_foreign_keys(dbapi_connection, _connection_record):
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.close()
-
+    enable_sqlite_foreign_keys(engine)
     TestingSession = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
     Base.metadata.create_all(bind=engine)
     with TestingSession() as db:

@@ -48,7 +48,7 @@ def seed_demo_data(db: Session) -> None:
                 actor.display_name, actor.role, actor.customer_id, actor.tenant_id = name, role, customer_id, TENANT_ID
     if not is_new_demo and not db.get(DemoActor, "manager"):
         db.add(DemoActor(id="manager", display_name="Demo Manager", role="manager", customer_id=None))
-    if not is_new_demo and not db.get(Product, "P-200"):
+    if not is_new_demo and not db.scalar(select(Product).where(Product.id == "P-200", Product.tenant_id == TENANT_ID)):
         db.add(Product(id="P-200", name="Product B", currency="USD", unit_price=Decimal("250.00"), stock=800, tenant_id=TENANT_ID))
     if not is_new_demo and not db.scalar(select(Policy).where(Policy.policy_id == POLICY_ID, Policy.version == "v3")):
         db.add(Policy(

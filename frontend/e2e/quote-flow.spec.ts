@@ -128,4 +128,17 @@ test("workspace admin can assign a product-specific policy scope", async ({ page
   await expect(page.getByText("结构化规则已保存为待审草稿")).toBeVisible();
   await page.getByRole("button", { name: "保存并激活" }).click();
   await expect(page.getByText(`SCOPE-${suffix}@v1 已激活`)).toBeVisible();
+
+  const customer = await apiPost<{ id: string }>(page, "/api/v1/customers", { name: `Diff Buyer ${suffix}`, tier: "VIP" });
+  await createPolicy(page, `DIFF-${suffix}`, "v1", 10, "Discount policy v1 permits up to 10 percent.");
+  await createPolicy(page, `DIFF-${suffix}`, "v2", 5, "Discount policy v2 permits up to 5 percent.");
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "询盘与报价工作台" })).toBeVisible();
+  await page.getByLabel("客户账户").selectOption(customer.id);
+  await page.getByLabel("询盘内容").fill(`Please quote ${productId} 10 units at 8% discount.`);
+  await page.getByLabel("基准政策").selectOption(`DIFF-${suffix}@v1`);
+  await page.getByLabel("对比政策").selectOption(`DIFF-${suffix}@v2`);
+  await page.getByRole("button", { name: "比较当前询盘" }).click();
+  await expect(page.locator(".dg-diff-result")).toContainText("v1: ALLOW");
+  await expect(page.locator(".dg-diff-result")).toContainText("v2: DENY");
 });

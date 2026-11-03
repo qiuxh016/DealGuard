@@ -77,7 +77,7 @@ def test_guard_rejects_reference_only_policy_without_writing_quote(client):
     with client.app.state.session_factory() as db:
         actor = db.get(DemoActor, "sales_a")
         customer = db.get(Customer, "C-001")
-        product = db.get(Product, "P-100")
+        product = db.scalar(select(Product).where(Product.id == "P-100"))
         policy = db.scalar(select(Policy).where(Policy.policy_id == "SHIPPING-REF"))
         decision, breakdown = evaluate_quote(
             actor, customer, product, policy,

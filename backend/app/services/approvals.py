@@ -14,6 +14,7 @@ from app.schemas.deal import ActionProposal, ApprovalOutcome, ApprovalRequestRes
 from app.services.quotes import quote_response
 from app.services.permissions import has_capability
 from app.services.policies import current_quote_policies
+from app.services.inventory import aggregate_inventory_failure
 
 
 def _manager(actor: DemoActor) -> None:
@@ -104,6 +105,7 @@ def process_approval(db: Session, actor: DemoActor, approval_id: str, approve: b
     customer = db.scalar(select(Customer).where(Customer.id == row.customer_id, Customer.tenant_id == actor.tenant_id))
     if row.lines:
         current_lines = []
+        current_product_keys: dict[str, str] = {}
         stale_code = None
         now = datetime.now(timezone.utc)
         if applicant is None or not has_capability(applicant, "inquiry.run") or applicant.customer_id != row.customer_id or customer is None:
@@ -129,8 +131,16 @@ def process_approval(db: Session, actor: DemoActor, approval_id: str, approve: b
                     break
                 elif breakdown is None:
                     breakdown = calculate_breakdown(product, proposal.quantity, proposal.requested_discount_pct)
+                current_product_keys[product.sku] = product.internal_id
                 provenance = quote_provenance(current, decision, guard_checks, saved.get("policy_provenance", {}).get("citation"), saved.get("policy_provenance", {}).get("citation_ref"), saved.get("policy_provenance", {}).get("chunk_id"))
                 current_lines.append({"product_id": product.id, "product_name": product.name, "currency": product.currency, "quantity": proposal.quantity, "unit_price": str(product.unit_price), "discount_pct": str(proposal.requested_discount_pct), "subtotal": str(breakdown.subtotal), "discount_amount": str(breakdown.discount_amount), "total": str(breakdown.total), "policy_id": current.policy_id, "policy_version": current.version, "policy_source": current.source, "policy_scope": current.policy_scope, "available_stock": product.stock, "inventory_checked_at": now.isoformat(), **provenance})
+        if not stale_code:
+            inventory_failure = aggregate_inventory_failure(
+                (line["product_id"], line["quantity"], line["available_stock"])
+                for line in current_lines
+            )
+            if inventory_failure:
+                stale_code = "INSUFFICIENT_STOCK"
         if stale_code:
             if not _transition_pending(db, row, "STALE", actor.id, stale_code):
                 return _approval_conflict(db, approval_id, approve)
@@ -143,7 +153,7 @@ def process_approval(db: Session, actor: DemoActor, approval_id: str, approve: b
         subtotal = sum((Decimal(line["subtotal"]) for line in current_lines), Decimal("0"))
         discount_amount = sum((Decimal(line["discount_amount"]) for line in current_lines), Decimal("0"))
         total = sum((Decimal(line["total"]) for line in current_lines), Decimal("0"))
-        quote = QuoteDraft(tenant_id=actor.tenant_id, owner_actor_id=applicant.id, customer_id=customer.id, product_id=first["product_id"], quantity=sum(line["quantity"] for line in current_lines), unit_price=Decimal(first["unit_price"]), discount_pct=Decimal(first["discount_pct"]), subtotal=subtotal, discount_amount=discount_amount, total=total, policy_id=first["policy_id"], policy_version=first["policy_version"], policy_scope=row.policy_scope, lines=current_lines, status="DRAFT")
+        quote = QuoteDraft(tenant_id=actor.tenant_id, owner_actor_id=applicant.id, customer_id=customer.id, product_key=current_product_keys[first["product_id"]], product_id=first["product_id"], quantity=sum(line["quantity"] for line in current_lines), unit_price=Decimal(first["unit_price"]), discount_pct=Decimal(first["discount_pct"]), subtotal=subtotal, discount_amount=discount_amount, total=total, policy_id=first["policy_id"], policy_version=first["policy_version"], policy_scope=row.policy_scope, lines=current_lines, status="DRAFT")
         db.add(quote); db.flush(); row.quote_id = quote.id
         trace = _trace(db, row, "approved", "Manager approved after revalidating every line.", "APPROVAL_APPROVED")
         db.commit(); db.refresh(row); db.refresh(quote)
@@ -178,7 +188,7 @@ def process_approval(db: Session, actor: DemoActor, approval_id: str, approve: b
     line = {"product_id": product.id, "product_name": product.name, "currency": product.currency, "quantity": row.quantity, "unit_price": str(product.unit_price), "discount_pct": str(row.discount_pct), "subtotal": str(breakdown.subtotal), "discount_amount": str(breakdown.discount_amount), "total": str(breakdown.total), "policy_id": current.policy_id, "policy_version": current.version, "policy_source": current.source, "policy_scope": row.policy_scope, "available_stock": product.stock, "inventory_checked_at": now.isoformat(), **quote_provenance(current, decision, guard_checks, None, None, None)}
     quote = QuoteDraft(
         tenant_id=actor.tenant_id,
-        owner_actor_id=applicant.id, customer_id=customer.id, product_id=product.id,
+        owner_actor_id=applicant.id, customer_id=customer.id, product_key=product.internal_id, product_id=product.sku,
         quantity=row.quantity, unit_price=product.unit_price, discount_pct=row.discount_pct,
         subtotal=breakdown.subtotal, discount_amount=breakdown.discount_amount, total=breakdown.total,
         policy_id=current.policy_id, policy_version=current.version, status="DRAFT",

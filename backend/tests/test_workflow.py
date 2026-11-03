@@ -7,7 +7,7 @@ from threading import Barrier, Event
 import pytest
 from sqlalchemy import func, select
 
-from app.db.models import ApprovalRequest, Customer, Policy, Product, QuoteDraft, RunRecord
+from app.db.models import ApprovalRequest, Customer, Policy, PolicyDraft, Product, QuoteDraft, RunRecord
 from app.services import approvals as approval_services
 from app.api.routes import runs as runs_route
 
@@ -80,6 +80,31 @@ def test_multi_item_failure_does_not_create_partial_quote(client, inquiry, reaso
         assert Decimal(result["decision"]["suggested_discount_pct"]) == Decimal("10")
         assert result["decision"]["suggested_product_id"] == "P-200"
     assert result["quote"] is None
+    assert count_quotes(client) == 0
+
+
+def test_duplicate_product_lines_cannot_exceed_aggregate_stock(client):
+    result = client.post("/api/v1/runs", json={"inquiry": "Please quote P-100 1,200 units at 5%; P-100 900 units at 3%."}).json()
+    assert result["decision"]["decision"] == "DENY"
+    assert result["decision"]["reason_code"] == "INSUFFICIENT_STOCK"
+    assert result["quote"] is None and result["approval_request"] is None
+    assert result["trace"][-1]["details"]["requested_quantity"] == 2100
+    assert count_quotes(client) == count_approvals(client) == 0
+
+
+def test_approval_rechecks_aggregate_stock_for_duplicate_product_lines(client):
+    _activate(client, "v3")
+    result = client.post("/api/v1/runs", json={"inquiry": "Please quote P-100 500 units at 7%; P-100 500 units at 6%."}).json()
+    assert result["decision"]["decision"] == "REVIEW", result
+    with client.app.state.session_factory() as db:
+        product = db.scalar(select(Product).where(Product.id == "P-100"))
+        product.stock = 800
+        db.commit()
+    response = client.post(f"/api/v1/approvals/{result['approval_request']['id']}/approve", headers={"X-Demo-Actor": "manager"})
+    assert response.status_code == 200
+    assert response.json()["approval"]["state"] == "STALE"
+    assert response.json()["trace"][-1]["details"]["reason_code"] == "INSUFFICIENT_STOCK"
+    assert response.json()["quote"] is None
     assert count_quotes(client) == 0
 
 
@@ -622,7 +647,7 @@ def test_rejected_and_stale_approvals_never_create_quote(client):
 def test_approval_goes_stale_if_inventory_changes(client):
     approval_id = _review_request(client)
     with client.app.state.session_factory() as db:
-        db.get(Product, "P-100").stock = 999
+        db.scalar(select(Product).where(Product.id == "P-100")).stock = 999
         db.commit()
     response = client.post(f"/api/v1/approvals/{approval_id}/approve", headers={"X-Demo-Actor": "manager"})
     assert response.status_code == 200
@@ -703,6 +728,97 @@ def test_policy_diff_is_read_only_and_uses_each_registered_version(client):
     assert diff.json()["compare"]["decision"]["decision"] == "DENY"
     assert count_quotes(client) == 0
     assert [(p["version"], p["status"]) for p in client.get("/api/v1/policies").json()] == before
+
+
+def test_admin_policy_diff_uses_selected_tenant_customer_and_all_lines(client):
+    result = client.post("/api/v1/policy-diffs", headers={"X-Demo-Actor": "admin"}, json={
+        "customer_id": "C-001", "inquiry": "Please quote P-100 10 units at 5%; P-200 4 units at 3%.",
+        "base_policy_id": "DISCOUNT-01", "base_version": "v1", "compare_policy_id": "DISCOUNT-01", "compare_version": "v2",
+    })
+    assert result.status_code == 200, result.text
+    assert result.json()["base"]["decision"]["decision"] == "ALLOW"
+    assert [line["product_id"] for line in result.json()["base"]["lines"]] == ["P-100", "P-200"]
+    assert result.json()["compare"]["decision"]["decision"] == "ALLOW"
+
+
+def test_policy_diff_applies_aggregate_stock_and_currency_rules(client):
+    duplicate = client.post("/api/v1/policy-diffs", headers={"X-Demo-Actor": "admin"}, json={
+        "customer_id": "C-001", "inquiry": "Please quote P-100 1,200 units at 5%; P-100 900 units at 3%.",
+        "base_policy_id": "DISCOUNT-01", "base_version": "v1", "compare_policy_id": "DISCOUNT-01", "compare_version": "v2",
+    })
+    assert duplicate.status_code == 200
+    assert duplicate.json()["base"]["decision"]["reason_code"] == "INSUFFICIENT_STOCK"
+    assert all(line["decision"]["reason_code"] == "INSUFFICIENT_STOCK" for line in duplicate.json()["base"]["lines"])
+    assert count_quotes(client) == 0
+
+
+def test_policy_diff_cannot_select_another_customer(client):
+    response = client.post("/api/v1/policy-diffs", json={
+        "customer_id": "C-002", "inquiry": "Quote 10 units of Product A at 5% discount.",
+        "base_policy_id": "DISCOUNT-01", "base_version": "v1", "compare_policy_id": "DISCOUNT-01", "compare_version": "v2",
+    })
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "CUSTOMER_NOT_FOUND"
+
+
+def test_policy_diff_rejects_cross_tenant_customer_and_does_not_expose_product(client, monkeypatch):
+    from app.api.routes import policy_tools
+    from app.db.models import Tenant
+    from app.schemas.deal import InquiryIntent
+
+    with client.app.state.session_factory() as db:
+        db.add(Tenant(id="other-tenant", name="Other Workspace"))
+        db.flush()
+        db.add(Customer(id="OTHER-CUSTOMER", name="Private Buyer", tier="VIP", tenant_id="other-tenant"))
+        db.add(Product(id="SECRET-SKU", name="Secret Product", currency="USD", unit_price=Decimal("98765.43"), stock=77, tenant_id="other-tenant"))
+        db.commit()
+    foreign_customer = client.post("/api/v1/policy-diffs", headers={"X-Demo-Actor": "admin"}, json={
+        "customer_id": "OTHER-CUSTOMER", "inquiry": "irrelevant", "base_policy_id": "DISCOUNT-01", "base_version": "v1",
+        "compare_policy_id": "DISCOUNT-01", "compare_version": "v2",
+    })
+    assert foreign_customer.status_code == 404
+
+    monkeypatch.setattr(policy_tools, "_parse_intent", lambda _state: {"intent": InquiryIntent(
+        product_id="SECRET-SKU", quantity=4, requested_discount_pct=Decimal("5"), customer_message="test",
+    ).model_dump(mode="json")})
+    foreign_product = client.post("/api/v1/policy-diffs", headers={"X-Demo-Actor": "admin"}, json={
+        "customer_id": "C-001", "inquiry": "irrelevant", "base_policy_id": "DISCOUNT-01", "base_version": "v1",
+        "compare_policy_id": "DISCOUNT-01", "compare_version": "v2",
+    })
+    assert foreign_product.status_code == 200
+    assert foreign_product.json()["base"]["decision"]["reason_code"] == "BUSINESS_DATA_NOT_FOUND"
+    assert "Secret Product" not in foreign_product.text and "98765.43" not in foreign_product.text
+
+
+def test_policy_draft_activation_rolls_back_on_mid_transaction_failure(client, monkeypatch):
+    from fastapi import HTTPException
+    from app.api.routes import policy_tools
+    from app.db.models import PolicyAuditEvent
+
+    with client.app.state.session_factory() as db:
+        draft = PolicyDraft(policy_id="DISCOUNT-01", version="v4", title="Transactional test",
+            action_type="quote_discount", policy_scope="general", customer_tier="VIP", max_discount_pct=Decimal("4"),
+            exception_approval_allowed=False, source="Test policy text", uploaded_by="admin", tenant_id="harborlight-demo")
+        db.add(draft)
+        db.commit()
+        draft_id = draft.id
+
+    original_activate_policy = policy_tools.activate_policy
+
+    def fail_after_partial_activation(db, actor, policy_row_id, *, commit=True):
+        original_activate_policy(db, actor, policy_row_id, commit=False)
+        raise HTTPException(status_code=503, detail={"code": "INJECTED_ACTIVATION_FAILURE", "message": "test"})
+
+    monkeypatch.setattr(policy_tools, "activate_policy", fail_after_partial_activation)
+    response = client.post(f"/api/v1/policy-drafts/{draft_id}/activate", headers={"X-Demo-Actor": "admin"})
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "INJECTED_ACTIVATION_FAILURE"
+
+    with client.app.state.session_factory() as db:
+        assert db.get(PolicyDraft, draft_id).status == "draft"
+        assert db.scalar(select(Policy).where(Policy.policy_id == "DISCOUNT-01", Policy.version == "v4")) is None
+        assert db.scalar(select(Policy).where(Policy.policy_id == "DISCOUNT-01", Policy.version == "v1")).status == "active"
+        assert db.scalar(select(PolicyAuditEvent).where(PolicyAuditEvent.action == "policy_activated", PolicyAuditEvent.version == "v4")) is None
 
 
 def test_metrics_duration_and_csv_match_saved_quote(client):

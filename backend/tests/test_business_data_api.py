@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from sqlalchemy import select
 
-from app.db.models import DemoActor, Policy
+from app.db.models import DemoActor, Policy, Product, Tenant
 
 
 def test_registered_workspace_admin_can_setup_data_and_invite_sales_to_run_quote(client):
@@ -16,15 +16,27 @@ def test_registered_workspace_admin_can_setup_data_and_invite_sales_to_run_quote
     customer = client.post("/api/v1/customers", json={"name": "Contoso Retail", "tier": "VIP"})
     assert customer.status_code == 201
     product = client.post("/api/v1/products", json={
-        "id": "P-900", "name": "Industrial Pump", "currency": "USD", "unit_price": "12.50", "stock": 100,
+        "sku": "P-900", "name": "Industrial Pump", "currency": "USD", "unit_price": "12.50", "stock": 100,
     })
     assert product.status_code == 201
+    assert product.json()["id"] == product.json()["sku"] == "P-900"
     assert [row["id"] for row in client.get("/api/v1/customers").json()] == [customer.json()["id"]]
     assert [row["id"] for row in client.get("/api/v1/products").json()] == ["P-900"]
     assert client.get("/api/v1/auth/me").json()["actor_id"] == registered.json()["actor_id"]
 
     with client.app.state.session_factory() as db:
         actor = db.get(DemoActor, registered.json()["actor_id"])
+        first_internal_id = db.scalar(select(Product.internal_id).where(Product.tenant_id == tenant_id, Product.sku == "P-900"))
+        db.add(Tenant(id="northwind-second", name="Second workspace"))
+        db.flush()
+        duplicate_sku = Product(
+            sku="P-900", name="Different product", currency="USD", unit_price=Decimal("20"),
+            stock=50, tenant_id="northwind-second",
+        )
+        db.add(duplicate_sku)
+        db.flush()
+        assert duplicate_sku.internal_id != first_internal_id
+        assert [row["id"] for row in client.get("/api/v1/products").json()] == ["P-900"]
         db.add(Policy(
             policy_id="STARTER-DISCOUNT", version="v1", title="Starter discount", action_type="quote_discount",
             policy_scope="general", status="active", customer_tier="VIP", max_discount_pct=Decimal("5"),

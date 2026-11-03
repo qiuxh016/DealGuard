@@ -3,7 +3,7 @@ from decimal import Decimal
 from uuid import uuid4
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, synonym
 
 from app.db.database import Base
 
@@ -80,8 +80,11 @@ class PasswordResetToken(Base):
 
 class Product(Base):
     __tablename__ = "products"
+    __table_args__ = (UniqueConstraint("tenant_id", "sku", name="uq_products_tenant_sku"),)
 
-    id: Mapped[str] = mapped_column(String, primary_key=True)
+    internal_id: Mapped[str] = mapped_column("id", String, primary_key=True, default=lambda: str(uuid4()))
+    sku: Mapped[str] = mapped_column(String, nullable=False)
+    id = synonym("sku")
     name: Mapped[str] = mapped_column(String, nullable=False)
     currency: Mapped[str] = mapped_column(String, nullable=False, default="USD")
     unit_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
@@ -126,7 +129,8 @@ class QuoteDraft(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
     owner_actor_id: Mapped[str] = mapped_column(ForeignKey("demo_actors.id"), nullable=False)
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), nullable=False)
-    product_id: Mapped[str] = mapped_column(ForeignKey("products.id"), nullable=False)
+    product_key: Mapped[str] = mapped_column(ForeignKey("products.id"), nullable=False)
+    product_id: Mapped[str] = mapped_column(String, nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     unit_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     discount_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
@@ -170,7 +174,8 @@ class ApprovalRequest(Base):
     run_id: Mapped[str] = mapped_column(ForeignKey("runs.id"), nullable=False, index=True)
     applicant_actor_id: Mapped[str] = mapped_column(ForeignKey("demo_actors.id"), nullable=False)
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), nullable=False)
-    product_id: Mapped[str] = mapped_column(ForeignKey("products.id"), nullable=False)
+    product_key: Mapped[str] = mapped_column(ForeignKey("products.id"), nullable=False)
+    product_id: Mapped[str] = mapped_column(String, nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     discount_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
     policy_id: Mapped[str] = mapped_column(String, nullable=False)

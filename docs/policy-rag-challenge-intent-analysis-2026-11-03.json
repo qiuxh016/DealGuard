@@ -1,0 +1,82 @@
+{
+  "dataset_sha256": "41e1e233abb56828ff4498c750f8901c36fb38faf5a85e12aab560ec9abeb00d",
+  "error_cases": {
+    "irrelevant_false_citations": [
+      "challenge-abstain-bulk-near-topic",
+      "challenge-abstain-earlypay-near-topic",
+      "challenge-abstain-product-near-topic",
+      "challenge-abstain-season-near-topic"
+    ],
+    "relevant_abstentions": [
+      "challenge-abstain-bulk-synonym",
+      "challenge-abstain-earlypay-synonym",
+      "challenge-abstain-loyalty-synonym",
+      "challenge-abstain-season-synonym"
+    ],
+    "relevant_false_citations": [
+      "challenge-abstain-product-synonym"
+    ]
+  },
+  "frozen_scorer_sha256": "4dba168ef79c9f314b60420e7f90970a4d0761e833c0fb6c403eb71bdc0aea37",
+  "independent_blind_test": false,
+  "intent_groups": {
+    "explicit_policy_intent": {
+      "abstained_count": 0,
+      "case_ids": [
+        "challenge-cite-bulk-mixed",
+        "challenge-cite-earlypay-mixed",
+        "challenge-cite-product-mixed",
+        "challenge-cite-loyalty-mixed",
+        "challenge-cite-season-mixed"
+      ],
+      "citation_rate": 1.0,
+      "cited_count": 5,
+      "correct_count": 5,
+      "count": 5
+    },
+    "near_topic_but_non_policy_intent": {
+      "abstained_count": 0,
+      "case_ids": [
+        "challenge-abstain-bulk-near-topic",
+        "challenge-abstain-earlypay-near-topic",
+        "challenge-abstain-product-near-topic",
+        "challenge-abstain-season-near-topic"
+      ],
+      "citation_rate": 1.0,
+      "cited_count": 4,
+      "correct_count": 0,
+      "count": 4
+    },
+    "related_paraphrase_or_underspecified": {
+      "abstained_count": 4,
+      "case_ids": [
+        "challenge-abstain-bulk-synonym",
+        "challenge-abstain-earlypay-synonym",
+        "challenge-abstain-product-synonym",
+        "challenge-abstain-loyalty-synonym",
+        "challenge-abstain-season-synonym"
+      ],
+      "citation_rate": 0.2,
+      "cited_count": 1,
+      "correct_count": 4,
+      "count": 5
+    }
+  },
+  "interpretation": [
+    "All five direct mixed-language requests retrieved the expected source clause.",
+    "Synonym or underspecified related requests produced one false citation and four abstentions; cited source text remained authentic, but topic overlap alone did not establish request intent.",
+    "All four near-topic non-policy requests were cited, showing the current lexical scorer has no reliable intent mismatch gate on this set.",
+    "Do not tune the scorer from this author-created challenge set; obtain a separately authored and sealed challenge set first."
+  ],
+  "offline_challenge_only": true,
+  "overall": {
+    "case_count": 14,
+    "citation_source_integrity": true,
+    "irrelevant_false_citation_rate": 1.0,
+    "relevant_abstention_rate": 0.4,
+    "relevant_citation_accuracy": 0.8333333333333334,
+    "relevant_citation_coverage": 0.6
+  },
+  "real_model_evaluation": false,
+  "report_type": "frozen_retrieval_intent_error_analysis"
+}

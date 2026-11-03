@@ -1,0 +1,94 @@
+{
+  "base_url_host": "api.deepseek.com",
+  "cases": 50,
+  "dataset_sha256": "eaf82293005b209bc32ea0c8f6eceef0deed375f6d0bef6545c98faefeb6b1e7",
+  "generated_at": "2026-11-03T05:10:02.397300+00:00",
+  "model": "deepseek-flash",
+  "packages": {
+    "langchain-openai": "1.7.3",
+    "openai": "3.42.1"
+  },
+  "runs": [
+    {
+      "by_split": {
+        "development": {
+          "cases": 35,
+          "exact_match_rate": 1.0,
+          "exact_matches": 35,
+          "successful_calls": 35
+        },
+        "holdout": {
+          "cases": 15,
+          "exact_match_rate": 1.0,
+          "exact_matches": 15,
+          "successful_calls": 15
+        }
+      },
+      "cases": 50,
+      "exact_match_rate": 1.0,
+      "exact_matches": 50,
+      "failed_calls": 0,
+      "failures": [],
+      "field_accuracy": {
+        "customer_message_matches": 1.0,
+        "item_count": 1.0,
+        "product_id": 1.0,
+        "quantity": 1.0,
+        "requested_discount_pct": 1.0
+      },
+      "latency_ms": {
+        "mean": 1011.9,
+        "p50": 990.4,
+        "p95": 1410.9
+      },
+      "run": 1,
+      "successful_calls": 50,
+      "tokens": {
+        "input": 29327,
+        "output": 5091,
+        "total": 34418
+      }
+    },
+    {
+      "by_split": {
+        "development": {
+          "cases": 35,
+          "exact_match_rate": 1.0,
+          "exact_matches": 35,
+          "successful_calls": 35
+        },
+        "holdout": {
+          "cases": 15,
+          "exact_match_rate": 1.0,
+          "exact_matches": 15,
+          "successful_calls": 15
+        }
+      },
+      "cases": 50,
+      "exact_match_rate": 1.0,
+      "exact_matches": 50,
+      "failed_calls": 0,
+      "failures": [],
+      "field_accuracy": {
+        "customer_message_matches": 1.0,
+        "item_count": 1.0,
+        "product_id": 1.0,
+        "quantity": 1.0,
+        "requested_discount_pct": 1.0
+      },
+      "latency_ms": {
+        "mean": 974.4,
+        "p50": 978.9,
+        "p95": 1194.6
+      },
+      "run": 2,
+      "successful_calls": 50,
+      "tokens": {
+        "input": 29327,
+        "output": 5077,
+        "total": 34404
+      }
+    }
+  ],
+  "split": "all"
+}

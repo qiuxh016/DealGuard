@@ -9,10 +9,11 @@ from app.agents.workflow import _parse_intent
 from app.db.database import get_db
 from app.db.models import Customer, DemoActor, Policy, PolicyDraft, Product
 from app.guards.business_rules import evaluate_quote
-from app.schemas.deal import ActionProposal, GuardDecision, InquiryIntent, MetricsResponse, PolicyDiffRequest, PolicyDiffResponse, PolicyDiffSide, PolicyDraftResponse, PolicyDraftUpdate
+from app.schemas.deal import ActionProposal, GuardDecision, InquiryIntent, MetricsResponse, PolicyDiffLine, PolicyDiffRequest, PolicyDiffResponse, PolicyDiffSide, PolicyDraftResponse, PolicyDraftUpdate
 from app.db.models import RunRecord
 from app.services.actors import get_current_actor
 from app.services.permissions import has_capability, require_capability
+from app.services.inventory import aggregate_inventory_failure
 from app.services.policy_audit import add_policy_audit_event
 from app.services.policies import activate_policy
 
@@ -144,22 +145,33 @@ def activate_draft(draft_id: str, actor: DemoActor = Depends(get_current_actor),
     db.add(policy)
     db.flush()
     row.status, row.policy_row_id = "active", policy.id
+    activate_policy(db, actor, policy.id, commit=False)
     db.commit()
     db.refresh(row)
-    activate_policy(db, actor, policy.id)
     return _draft_response(row)
 
 
 @router.post("/policy-diffs", response_model=PolicyDiffResponse)
 def compare_policies(body: PolicyDiffRequest, actor: DemoActor = Depends(get_current_actor), db: Session = Depends(get_db)):
     require_capability(actor, "policy.diff", code="POLICY_DIFF_ROLE_REQUIRED", message="This role cannot compare policy versions.")
-    customer = db.get(Customer, actor.customer_id) if actor.customer_id else None
+    if actor.role == "sales":
+        if body.customer_id and body.customer_id != actor.customer_id:
+            raise HTTPException(status_code=404, detail={"code": "CUSTOMER_NOT_FOUND", "message": "Customer not found."})
+        customer_id = actor.customer_id
+    else:
+        customer_id = body.customer_id
+    customer = db.scalar(select(Customer).where(Customer.id == customer_id, Customer.tenant_id == actor.tenant_id)) if customer_id else None
+    if customer is None:
+        raise HTTPException(status_code=404, detail={"code": "CUSTOMER_NOT_FOUND", "message": "Customer not found."})
     try:
         parsed = _parse_intent({"raw_inquiry": body.inquiry, "events": []})
         intent = InquiryIntent.model_validate(parsed["intent"])
     except Exception as exc:
         raise HTTPException(status_code=503, detail={"code": "POLICY_DIFF_PARSE_FAILED", "message": "The inquiry could not be parsed; no comparison was run."}) from exc
-    product = db.get(Product, intent.product_id) if intent.product_id else None
+    requested_items = intent.items or ([{"product_id": intent.product_id, "quantity": intent.quantity, "requested_discount_pct": intent.requested_discount_pct}] if intent.product_id else [])
+    requested_product_ids = {item["product_id"] if isinstance(item, dict) else item.product_id for item in requested_items}
+    products = db.scalars(select(Product).where(Product.id.in_(requested_product_ids), Product.tenant_id == actor.tenant_id)).all() if requested_product_ids else []
+    products_by_id = {product.id: product for product in products}
     base = db.scalar(select(Policy).where(Policy.tenant_id == actor.tenant_id, Policy.policy_id == body.base_policy_id, Policy.version == body.base_version))
     compare = db.scalar(select(Policy).where(Policy.tenant_id == actor.tenant_id, Policy.policy_id == body.compare_policy_id, Policy.version == body.compare_version))
     if not base or not compare:
@@ -168,20 +180,78 @@ def compare_policies(body: PolicyDiffRequest, actor: DemoActor = Depends(get_cur
         raise HTTPException(status_code=422, detail={"code": "POLICY_SCOPE_MISMATCH", "message": "Policy versions must apply to the same customer tier."})
     if base.action_type != compare.action_type:
         raise HTTPException(status_code=422, detail={"code": "POLICY_ACTION_MISMATCH", "message": "Policy versions must authorize the same action."})
-    proposal = ActionProposal(customer_id=customer.id if customer else "", product_id=intent.product_id or "", quantity=intent.quantity or 1,
-                              requested_discount_pct=intent.requested_discount_pct or Decimal("0"))
-    missing = [name for name in ("product_id", "quantity", "requested_discount_pct") if getattr(intent, name) is None]
+    missing = [] if requested_items else [name for name in ("product_id", "quantity", "requested_discount_pct") if getattr(intent, name) is None]
+    simulated_actor = actor if actor.role == "sales" else DemoActor(id=actor.id, display_name=actor.display_name, role="sales", customer_id=customer.id, tenant_id=actor.tenant_id)
     def side(policy: Policy) -> PolicyDiffSide:
         if missing:
             decision = GuardDecision(decision="NEEDS_INPUT", reason_code="MISSING_REQUIRED_FIELDS", policy_id=policy.policy_id,
                                      policy_version=policy.version, human_message="Inquiry is missing: " + ", ".join(missing))
             breakdown = None
-        elif customer is None or customer.tier != policy.customer_tier or product is None:
+            lines = []
+        elif customer.tier != policy.customer_tier:
             decision = GuardDecision(decision="DENY", reason_code="POLICY_NOT_APPLICABLE", policy_id=policy.policy_id,
-                                     policy_version=policy.version, human_message="This policy does not apply to the account's customer tier or requested product.")
+                                     policy_version=policy.version, human_message="This policy does not apply to the selected customer's verified tier.")
             breakdown = None
+            lines = []
+        elif not requested_items:
+            decision = GuardDecision(decision="NEEDS_INPUT", reason_code="MISSING_REQUIRED_FIELDS", policy_id=policy.policy_id,
+                                     policy_version=policy.version, human_message="Inquiry must include at least one product, quantity, and discount.")
+            breakdown = None
+            lines = []
         else:
-            decision, breakdown = evaluate_quote(actor, customer, product, policy, proposal, intent.policy_scope)
+            all_products_found = all(
+                (item["product_id"] if isinstance(item, dict) else item.product_id) in products_by_id
+                for item in requested_items
+            )
+            currencies = {
+                products_by_id[item["product_id"] if isinstance(item, dict) else item.product_id].currency
+                for item in requested_items
+                if (item["product_id"] if isinstance(item, dict) else item.product_id) in products_by_id
+            }
+            mixed_currency = all_products_found and len(currencies) > 1
+            quantities_complete = all((item["quantity"] if isinstance(item, dict) else item.quantity) is not None for item in requested_items)
+            inventory_failure = None
+            if all_products_found and quantities_complete:
+                inventory_failure = aggregate_inventory_failure(
+                    (
+                        item["product_id"] if isinstance(item, dict) else item.product_id,
+                        item["quantity"] if isinstance(item, dict) else item.quantity,
+                        products_by_id[item["product_id"] if isinstance(item, dict) else item.product_id].stock,
+                    )
+                    for item in requested_items
+                )
+            lines = []
+            for item in requested_items:
+                product_id = item["product_id"] if isinstance(item, dict) else item.product_id
+                quantity = item["quantity"] if isinstance(item, dict) else item.quantity
+                discount = item["requested_discount_pct"] if isinstance(item, dict) else item.requested_discount_pct
+                product = products_by_id.get(product_id)
+                if mixed_currency:
+                    line_decision = GuardDecision(decision="DENY", reason_code="MIXED_CURRENCY_UNSUPPORTED", policy_id=policy.policy_id,
+                                                  policy_version=policy.version, human_message="All items in one quote must use the same currency.")
+                    line_breakdown = None
+                elif inventory_failure and product_id == inventory_failure[0]:
+                    line_decision = GuardDecision(decision="DENY", reason_code="INSUFFICIENT_STOCK", policy_id=policy.policy_id,
+                                                  policy_version=policy.version, human_message="The combined requested quantity exceeds current stock.")
+                    line_breakdown = None
+                elif product is None:
+                    line_decision = GuardDecision(decision="DENY", reason_code="BUSINESS_DATA_NOT_FOUND", policy_id=policy.policy_id, policy_version=policy.version,
+                                                  human_message="One or more requested products were not found in this workspace.")
+                    line_breakdown = None
+                elif quantity is None or discount is None:
+                    line_decision = GuardDecision(decision="NEEDS_INPUT", reason_code="MISSING_REQUIRED_FIELDS", policy_id=policy.policy_id,
+                                                  policy_version=policy.version, human_message="Inquiry is missing quantity or discount for a requested product.")
+                    line_breakdown = None
+                else:
+                    proposal = ActionProposal(customer_id=customer.id, product_id=product.id, quantity=quantity, requested_discount_pct=discount)
+                    line_decision, line_breakdown = evaluate_quote(simulated_actor, customer, product, policy, proposal, intent.policy_scope)
+                lines.append(PolicyDiffLine(product_id=product_id, decision=line_decision, breakdown=line_breakdown))
+            decisions = [line.decision for line in lines]
+            selected = next((item for item in decisions if item.decision == "DENY"), None) or next((item for item in decisions if item.decision == "NEEDS_INPUT"), None) or next((item for item in decisions if item.decision == "REVIEW"), None)
+            decision = selected or GuardDecision(decision="ALLOW", reason_code="WITHIN_POLICY", policy_id=policy.policy_id,
+                policy_version=policy.version, human_message="Every quote line passed this policy version.")
+            decision = decision.model_copy(update={"policy_id": policy.policy_id, "policy_version": policy.version})
+            breakdown = lines[0].breakdown if len(lines) == 1 else None
         return PolicyDiffSide(policy_id=policy.policy_id, version=policy.version, title=policy.title,
-                              citation=policy.source, decision=decision, breakdown=breakdown)
+                              citation=policy.source, decision=decision, breakdown=breakdown, lines=lines)
     return PolicyDiffResponse(intent=intent, base=side(base), compare=side(compare))

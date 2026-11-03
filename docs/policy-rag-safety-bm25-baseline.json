@@ -1,0 +1,970 @@
+{
+  "case_count": 26,
+  "cases": [
+    {
+      "abstain_reason": null,
+      "actual_candidate_ids": [
+        "EVAL-BULK"
+      ],
+      "actual_conflict": false,
+      "bm25_top_policy_id": "EVAL-BULK",
+      "case_id": "safety-v2-bulk-en-dev",
+      "citation": "# Volume Purchase Discount\n\n## Eligibility\n\nFor verified VIP customers placing bulk, wholesale, pallet or high-volume orders, this policy provides a quantity-based discount.",
+      "citation_correct": true,
+      "citation_correct_bm25": true,
+      "citation_correct_dense": true,
+      "citation_is_source_substring": true,
+      "citation_ref": "EVAL-BULK@v1#L1-L5",
+      "conflict_edges": [],
+      "dense_top_policy_id": null,
+      "expected_candidate_ids": [
+        "EVAL-BULK"
+      ],
+      "expected_conflict": false,
+      "expected_policy_id": "EVAL-BULK",
+      "included_decoy_categories": [],
+      "language": "en",
+      "latency_ms": 2.949,
+      "missing_candidate_ids": [],
+      "policy_source_hash": "6c80997fdbddc1c9f738a79c95e1ec6f9101f16e848c29e6bfcd73c4e1bc63f7",
+      "selected_policy_id": "EVAL-BULK",
+      "split": "development",
+      "unexpected_candidate_ids": []
+    },
+    {
+      "abstain_reason": null,
+      "actual_candidate_ids": [
+        "EVAL-BULK"
+      ],
+      "actual_conflict": false,
+      "bm25_top_policy_id": "EVAL-BULK",
+      "case_id": "safety-v2-bulk-zh-holdout",
+      "citation": "## Authorization limit\n\nThe structured direct discount limit is 10%. Requests above 10% are denied.",
+      "citation_correct": false,
+      "citation_correct_bm25": false,
+      "citation_correct_dense": false,
+      "citation_is_source_substring": true,
+      "citation_ref": "EVAL-BULK@v1#L7-L9",
+      "conflict_edges": [],
+      "dense_top_policy_id": null,
+      "expected_candidate_ids": [
+        "EVAL-BULK"
+      ],
+      "expected_conflict": false,
+      "expected_policy_id": "EVAL-BULK",
+      "included_decoy_categories": [],
+      "language": "zh",
+      "latency_ms": 0.257,
+      "missing_candidate_ids": [],
+      "policy_source_hash": "6c80997fdbddc1c9f738a79c95e1ec6f9101f16e848c29e6bfcd73c4e1bc63f7",
+      "selected_policy_id": "EVAL-BULK",
+      "split": "holdout",
+      "unexpected_candidate_ids": []
+    },
+    {
+      "abstain_reason": null,
+      "actual_candidate_ids": [
+        "EVAL-LOYALTY"
+      ],
+      "actual_conflict": false,
+      "bm25_top_policy_id": "EVAL-LOYALTY",
+      "case_id": "safety-v2-loyalty-zh-dev",
+      "citation": "# VIP Loyalty Benefit\n\n## Eligibility\n\nReturning VIP accounts with a long-standing relationship may receive a loyalty rebate on a repeat purchase.",
+      "citation_correct": true,
+      "citation_correct_bm25": true,
+      "citation_correct_dense": true,
+      "citation_is_source_substring": true,
+      "citation_ref": "EVAL-LOYALTY@v1#L1-L5",
+      "conflict_edges": [],
+      "dense_top_policy_id": null,
+      "expected_candidate_ids": [
+        "EVAL-LOYALTY"
+      ],
+      "expected_conflict": false,
+      "expected_policy_id": "EVAL-LOYALTY",
+      "included_decoy_categories": [],
+      "language": "zh",
+      "latency_ms": 0.206,
+      "missing_candidate_ids": [],
+      "policy_source_hash": "933d295f355073b85af385c43e5371ba2a43c138ee0cdc294d20ae0c5979b04d",
+      "selected_policy_id": "EVAL-LOYALTY",
+      "split": "development",
+      "unexpected_candidate_ids": []
+    },
+    {
+      "abstain_reason": null,
+      "actual_candidate_ids": [
+        "EVAL-LOYALTY"
+      ],
+      "actual_conflict": false,
+      "bm25_top_policy_id": "EVAL-LOYALTY",
+      "case_id": "safety-v2-loyalty-en-holdout",
+      "citation": "# VIP Loyalty Benefit\n\n## Eligibility\n\nReturning VIP accounts with a long-standing relationship may receive a loyalty rebate on a repeat purchase.",
+      "citation_correct": true,
+      "citation_correct_bm25": true,
+      "citation_correct_dense": true,
+      "citation_is_source_substring": true,
+      "citation_ref": "EVAL-LOYALTY@v1#L1-L5",
+      "conflict_edges": [],
+      "dense_top_policy_id": null,
+      "expected_candidate_ids": [
+        "EVAL-LOYALTY"
+      ],
+      "expected_conflict": false,
+      "expected_policy_id": "EVAL-LOYALTY",
+      "included_decoy_categories": [],
+      "language": "en",
+      "latency_ms": 0.208,
+      "missing_candidate_ids": [],
+      "policy_source_hash": "933d295f355073b85af385c43e5371ba2a43c138ee0cdc294d20ae0c5979b04d",
+      "selected_policy_id": "EVAL-LOYALTY",
+      "split": "holdout",
+      "unexpected_candidate_ids": []
+    },
+    {
+      "abstain_reason": null,
+      "actual_candidate_ids": [
+        "EVAL-EARLYPAY"
+      ],
+      "actual_conflict": false,
+      "bm25_top_policy_id": "EVAL-EARLYPAY",
+      "case_id": "safety-v2-earlypay-en-dev",
+      "citation": "# Early Payment Concession\n\n## Eligibility\n\nVerified VIP customers who prepay, pay upfront or settle an invoice within seven days may receive an early-payment concession.",
+      "citation_correct": true,
+      "citation_correct_bm25": true,
+      "citation_correct_dense": true,
+      "citation_is_source_substring": true,
+      "citation_ref": "EVAL-EARLYPAY@v1#L1-L5",
+      "conflict_edges": [],
+      "dense_top_policy_id": null,
+      "expected_candidate_ids": [
+        "EVAL-EARLYPAY"
+      ],
+      "expected_conflict": false,
+      "expected_policy_id": "EVAL-EARLYPAY",
+      "included_decoy_categories": [],
+      "language": "en",
+      "latency_ms": 0.202,
+      "missing_candidate_ids": [],
+      "policy_source_hash": "fe46e0feebb7815dd52c5959c719ac11c24c862c30adfdf5357d72cef458e8be",
+      "selected_policy_id": "EVAL-EARLYPAY",
+      "split": "development",
+      "unexpected_candidate_ids": []
+    },
+    {
+      "abstain_reason": null,
+      "actual_candidate_ids": [
+        "EVAL-EARLYPAY"
+      ],
+      "actual_conflict": false,
+      "bm25_top_policy_id": "EVAL-EARLYPAY",
+      "case_id": "safety-v2-earlypay-zh-holdout",
+      "citation": "## Authorization limit\n\nThe structured direct discount limit is 7%. Requests above 7% are denied.",
+      "citation_correct": false,
+      "citation_correct_bm25": false,
+      "citation_correct_dense": false,
+      "citation_is_source_substring": true,
+      "citation_ref": "EVAL-EARLYPAY@v1#L7-L9",
+      "conflict_edges": [],
+      "dense_top_policy_id": null,
+      "expected_candidate_ids": [
+        "EVAL-EARLYPAY"
+      ],
+      "expected_conflict": false,
+      "expected_policy_id": "EVAL-EARLYPAY",
+      "included_decoy_categories": [],
+      "language": "zh",
+      "latency_ms": 0.191,
+      "missing_candidate_ids": [],
+      "policy_source_hash": "fe46e0feebb7815dd52c5959c719ac11c24c862c30adfdf5357d72cef458e8be",
+      "selected_policy_id": "EVAL-EARLYPAY",
+      "split": "holdout",
+      "unexpected_candidate_ids": []
+    },
+    {
+      "abstain_reason": null,
+      "actual_candidate_ids": [
+        "EVAL-SEASON"
+      ],
+      "actual_conflict": false,
+      "bm25_top_policy_id": "EVAL-SEASON",
+      "case_id": "safety-v2-season-zh-dev",
+      "citation": "# Seasonal Campaign Offer\n\n## Eligibility\n\nDuring an administrator-approved holiday, spring, summer or year-end campaign, verified VIP customers may request a seasonal promotion.",
+      "citation_correct": true,
+      "citation_correct_bm25": true,
+      "citation_correct_dense": true,
+      "citation_is_source_substring": true,
+      "citation_ref": "EVAL-SEASON@v1#L1-L5",
+      "conflict_edges": [],
+      "dense_top_policy_id": null,
+      "expected_candidate_ids": [
+        "EVAL-SEASON"
+      ],
+      "expected_conflict": false,
+      "expected_policy_id": "EVAL-SEASON",
+      "included_decoy_categories": [],
+      "language": "zh",
+      "latency_ms": 0.263,
+      "missing_candidate_ids": [],
+      "policy_source_hash": "6d778bdb210919244ee5a024b8d39009bbfe38858079b88048a5e878fb61d920",
+      "selected_policy_id": "EVAL-SEASON",
+      "split": "development",
+      "unexpected_candidate_ids": []
+    },
+    {
+      "abstain_reason": null,
+      "actual_candidate_ids": [
+        "EVAL-SEASON"
+      ],
+      "actual_conflict": false,
+      "bm25_top_policy_id": "EVAL-SEASON",
+      "case_id": "safety-v2-season-en-holdout",
+      "citation": "# Seasonal Campaign Offer\n\n## Eligibility\n\nDuring an administrator-approved holiday, spring, summer or year-end campaign, verified VIP customers may request a seasonal promotion.",
+      "citation_correct": true,
+      "citation_correct_bm25": true,
+      "citation_correct_dense": true,
+      "citation_is_source_substring": true,
+      "citation_ref": "EVAL-SEASON@v1#L1-L5",
+      "conflict_edges": [],
+      "dense_top_policy_id": null,
+      "expected_candidate_ids": [
+        "EVAL-SEASON"
+      ],
+      "expected_conflict": false,
+      "expected_policy_id": "EVAL-SEASON",
+      "included_decoy_categories": [],
+      "language": "en",
+      "latency_ms": 0.197,
+      "missing_candidate_ids": [],
+      "policy_source_hash": "6d778bdb210919244ee5a024b8d39009bbfe38858079b88048a5e878fb61d920",
+      "selected_policy_id": "EVAL-SEASON",
+      "split": "holdout",
+      "unexpected_candidate_ids": []
+    },
+    {
+      "abstain_reason": null,
+      "actual_candidate_ids": [
+        "EVAL-PRODUCT"
+      ],
+      "actual_conflict": false,
+      "bm25_top_policy_id": "EVAL-PRODUCT",
+      "case_id": "safety-v2-product-en-dev",
+      "citation": "# Product Category Promotion\n\n## Eligibility\n\nThe promotion applies only to P-100, a listed Product A catalog item in the designated series and product category.",
+      "citation_correct": true,
+      "citation_correct_bm25": true,
+      "citation_correct_dense": true,
+      "citation_is_source_substring": true,
+      "citation_ref": "EVAL-PRODUCT@v1#L1-L5",
+      "conflict_edges": [],
+      "dense_top_policy_id": null,
+      "expected_candidate_ids": [
+        "EVAL-PRODUCT"
+      ],
+      "expected_conflict": false,
+      "expected_policy_id": "EVAL-PRODUCT",
+      "included_decoy_categories": [],
+      "language": "en",
+      "latency_ms": 0.195,
+      "missing_candidate_ids": [],
+      "policy_source_hash": "a95e47ee3b37d869b2fa799ebf3ba6f0b4e8b544a416edc004474e6cb9e0638a",
+      "selected_policy_id": "EVAL-PRODUCT",
+      "split": "development",
+      "unexpected_candidate_ids": []
+    },
+    {
+      "abstain_reason": null,
+      "actual_candidate_ids": [
+        "EVAL-PRODUCT"
+      ],
+      "actual_conflict": false,
+      "bm25_top_policy_id": "EVAL-PRODUCT",
+      "case_id": "safety-v2-product-zh-holdout",
+      "citation": "## Commercial effect\n\nAn approved quote is a non-binding draft and does not create an order.",
+      "citation_correct": false,
+      "citation_correct_bm25": false,
+      "citation_correct_dense": false,
+      "citation_is_source_substring": true,
+      "citation_ref": "EVAL-PRODUCT@v1#L11-L13",
+      "conflict_edges": [],
+      "dense_top_policy_id": null,
+      "expected_candidate_ids": [
+        "EVAL-PRODUCT"
+      ],
+      "expected_conflict": false,
+      "expected_policy_id": "EVAL-PRODUCT",
+      "included_decoy_categories": [],
+      "language": "zh",
+      "latency_ms": 0.19,
+      "missing_candidate_ids": [],
+      "policy_source_hash": "a95e47ee3b37d869b2fa799ebf3ba6f0b4e8b544a416edc004474e6cb9e0638a",
+      "selected_policy_id": "EVAL-PRODUCT",
+      "split": "holdout",
+      "unexpected_candidate_ids": []
+    },
+    {
+      "abstain_reason": null,
+      "actual_candidate_ids": [
+        "EVAL-BULK"
+      ],
+      "actual_conflict": false,
+      "bm25_top_policy_id": "EVAL-BULK",
+      "case_id": "safety-v2-bulk-zh-dev",
+      "citation": "## Authorization limit\n\nThe structured direct discount limit is 10%. Requests above 10% are denied.",
+      "citation_correct": false,
+      "citation_correct_bm25": false,
+      "citation_correct_dense": false,
+      "citation_is_source_substring": true,
+      "citation_ref": "EVAL-BULK@v1#L7-L9",
+      "conflict_edges": [],
+      "dense_top_policy_id": null,
+      "expected_candidate_ids": [
+        "EVAL-BULK"
+      ],
+      "expected_conflict": false,
+      "expected_policy_id": "EVAL-BULK",
+      "included_decoy_categories": [],
+      "language": "zh",
+      "latency_ms": 0.187,
+      "missing_candidate_ids": [],
+      "policy_source_hash": "6c80997fdbddc1c9f738a79c95e1ec6f9101f16e848c29e6bfcd73c4e1bc63f7",
+      "selected_policy_id": "EVAL-BULK",
+      "split": "development",
+      "unexpected_candidate_ids": []
+    },
+    {
+      "abstain_reason": null,
+      "actual_candidate_ids": [
+        "EVAL-BULK"
+      ],
+      "actual_conflict": false,
+      "bm25_top_policy_id": "EVAL-BULK",
+      "case_id": "safety-v2-bulk-en-holdout",
+      "citation": "# Volume Purchase Discount\n\n## Eligibility\n\nFor verified VIP customers placing bulk, wholesale, pallet or high-volume orders, this policy provides a quantity-based discount.",
+      "citation_correct": true,
+      "citation_correct_bm25": true,
+      "citation_correct_dense": true,
+      "citation_is_source_substring": true,
+      "citation_ref": "EVAL-BULK@v1#L1-L5",
+      "conflict_edges": [],
+      "dense_top_policy_id": null,
+      "expected_candidate_ids": [
+        "EVAL-BULK"
+      ],
+      "expected_conflict": false,
+      "expected_policy_id": "EVAL-BULK",
+      "included_decoy_categories": [],
+      "language": "en",
+      "latency_ms": 0.193,
+      "missing_candidate_ids": [],
+      "policy_source_hash": "6c80997fdbddc1c9f738a79c95e1ec6f9101f16e848c29e6bfcd73c4e1bc63f7",
+      "selected_policy_id": "EVAL-BULK",
+      "split": "holdout",
+      "unexpected_candidate_ids": []
+    },
+    {
+      "abstain_reason": null,
+      "actual_candidate_ids": [
+        "EVAL-LOYALTY"
+      ],
+      "actual_conflict": false,
+      "bm25_top_policy_id": "EVAL-LOYALTY",
+      "case_id": "safety-v2-loyalty-en-dev",
+      "citation": "# VIP Loyalty Benefit\n\n## Eligibility\n\nReturning VIP accounts with a long-standing relationship may receive a loyalty rebate on a repeat purchase.",
+      "citation_correct": true,
+      "citation_correct_bm25": true,
+      "citation_correct_dense": true,
+      "citation_is_source_substring": true,
+      "citation_ref": "EVAL-LOYALTY@v1#L1-L5",
+      "conflict_edges": [],
+      "dense_top_policy_id": null,
+      "expected_candidate_ids": [
+        "EVAL-LOYALTY"
+      ],
+      "expected_conflict": false,
+      "expected_policy_id": "EVAL-LOYALTY",
+      "included_decoy_categories": [],
+      "language": "en",
+      "latency_ms": 0.195,
+      "missing_candidate_ids": [],
+      "policy_source_hash": "933d295f355073b85af385c43e5371ba2a43c138ee0cdc294d20ae0c5979b04d",
+      "selected_policy_id": "EVAL-LOYALTY",
+      "split": "development",
+      "unexpected_candidate_ids": []
+    },
+    {
+      "abstain_reason": null,
+      "actual_candidate_ids": [
+        "EVAL-LOYALTY"
+      ],
+      "actual_conflict": false,
+      "bm25_top_policy_id": "EVAL-LOYALTY",
+      "case_id": "safety-v2-loyalty-zh-holdout",
+      "citation": "# VIP Loyalty Benefit\n\n## Eligibility\n\nReturning VIP accounts with a long-standing relationship may receive a loyalty rebate on a repeat purchase.",
+      "citation_correct": true,
+      "citation_correct_bm25": true,
+      "citation_correct_dense": true,
+      "citation_is_source_substring": true,
+      "citation_ref": "EVAL-LOYALTY@v1#L1-L5",
+      "conflict_edges": [],
+      "dense_top_policy_id": null,
+      "expected_candidate_ids": [
+        "EVAL-LOYALTY"
+      ],
+      "expected_conflict": false,
+      "expected_policy_id": "EVAL-LOYALTY",
+      "included_decoy_categories": [],
+      "language": "zh",
+      "latency_ms": 0.192,
+      "missing_candidate_ids": [],
+      "policy_source_hash": "933d295f355073b85af385c43e5371ba2a43c138ee0cdc294d20ae0c5979b04d",
+      "selected_policy_id": "EVAL-LOYALTY",
+      "split": "holdout",
+      "unexpected_candidate_ids": []
+    },
+    {
+      "abstain_reason": null,
+      "actual_candidate_ids": [
+        "EVAL-EARLYPAY"
+      ],
+      "actual_conflict": false,
+      "bm25_top_policy_id": "EVAL-EARLYPAY",
+      "case_id": "safety-v2-earlypay-zh-dev",
+      "citation": "## Authorization limit\n\nThe structured direct discount limit is 7%. Requests above 7% are denied.",
+      "citation_correct": false,
+      "citation_correct_bm25": false,
+      "citation_correct_dense": false,
+      "citation_is_source_substring": true,
+      "citation_ref": "EVAL-EARLYPAY@v1#L7-L9",
+      "conflict_edges": [],
+      "dense_top_policy_id": null,
+      "expected_candidate_ids": [
+        "EVAL-EARLYPAY"
+      ],
+      "expected_conflict": false,
+      "expected_policy_id": "EVAL-EARLYPAY",
+      "included_decoy_categories": [],
+      "language": "zh",
+      "latency_ms": 0.184,
+      "missing_candidate_ids": [],
+      "policy_source_hash": "fe46e0feebb7815dd52c5959c719ac11c24c862c30adfdf5357d72cef458e8be",
+      "selected_policy_id": "EVAL-EARLYPAY",
+      "split": "development",
+      "unexpected_candidate_ids": []
+    },
+    {
+      "abstain_reason": null,
+      "actual_candidate_ids": [
+        "EVAL-EARLYPAY"
+      ],
+      "actual_conflict": false,
+      "bm25_top_policy_id": "EVAL-EARLYPAY",
+      "case_id": "safety-v2-earlypay-en-holdout",
+      "citation": "# Early Payment Concession\n\n## Eligibility\n\nVerified VIP customers who prepay, pay upfront or settle an invoice within seven days may receive an early-payment concession.",
+      "citation_correct": true,
+      "citation_correct_bm25": true,
+      "citation_correct_dense": true,
+      "citation_is_source_substring": true,
+      "citation_ref": "EVAL-EARLYPAY@v1#L1-L5",
+      "conflict_edges": [],
+      "dense_top_policy_id": null,
+      "expected_candidate_ids": [
+        "EVAL-EARLYPAY"
+      ],
+      "expected_conflict": false,
+      "expected_policy_id": "EVAL-EARLYPAY",
+      "included_decoy_categories": [],
+      "language": "en",
+      "latency_ms": 0.186,
+      "missing_candidate_ids": [],
+      "policy_source_hash": "fe46e0feebb7815dd52c5959c719ac11c24c862c30adfdf5357d72cef458e8be",
+      "selected_policy_id": "EVAL-EARLYPAY",
+      "split": "holdout",
+      "unexpected_candidate_ids": []
+    },
+    {
+      "abstain_reason": null,
+      "actual_candidate_ids": [
+        "EVAL-SEASON"
+      ],
+      "actual_conflict": false,
+      "bm25_top_policy_id": "EVAL-SEASON",
+      "case_id": "safety-v2-season-en-dev",
+      "citation": "# Seasonal Campaign Offer\n\n## Eligibility\n\nDuring an administrator-approved holiday, spring, summer or year-end campaign, verified VIP customers may request a seasonal promotion.",
+      "citation_correct": true,
+      "citation_correct_bm25": true,
+      "citation_correct_dense": true,
+      "citation_is_source_substring": true,
+      "citation_ref": "EVAL-SEASON@v1#L1-L5",
+      "conflict_edges": [],
+      "dense_top_policy_id": null,
+      "expected_candidate_ids": [
+        "EVAL-SEASON"
+      ],
+      "expected_conflict": false,
+      "expected_policy_id": "EVAL-SEASON",
+      "included_decoy_categories": [],
+      "language": "en",
+      "latency_ms": 0.197,
+      "missing_candidate_ids": [],
+      "policy_source_hash": "6d778bdb210919244ee5a024b8d39009bbfe38858079b88048a5e878fb61d920",
+      "selected_policy_id": "EVAL-SEASON",
+      "split": "development",
+      "unexpected_candidate_ids": []
+    },
+    {
+      "abstain_reason": null,
+      "actual_candidate_ids": [
+        "EVAL-SEASON"
+      ],
+      "actual_conflict": false,
+      "bm25_top_policy_id": "EVAL-SEASON",
+      "case_id": "safety-v2-season-zh-holdout",
+      "citation": "# Seasonal Campaign Offer\n\n## Eligibility\n\nDuring an administrator-approved holiday, spring, summer or year-end campaign, verified VIP customers may request a seasonal promotion.",
+      "citation_correct": true,
+      "citation_correct_bm25": true,
+      "citation_correct_dense": true,
+      "citation_is_source_substring": true,
+      "citation_ref": "EVAL-SEASON@v1#L1-L5",
+      "conflict_edges": [],
+      "dense_top_policy_id": null,
+      "expected_candidate_ids": [
+        "EVAL-SEASON"
+      ],
+      "expected_conflict": false,
+      "expected_policy_id": "EVAL-SEASON",
+      "included_decoy_categories": [],
+      "language": "zh",
+      "latency_ms": 0.203,
+      "missing_candidate_ids": [],
+      "policy_source_hash": "6d778bdb210919244ee5a024b8d39009bbfe38858079b88048a5e878fb61d920",
+      "selected_policy_id": "EVAL-SEASON",
+      "split": "holdout",
+      "unexpected_candidate_ids": []
+    },
+    {
+      "abstain_reason": null,
+      "actual_candidate_ids": [
+        "EVAL-PRODUCT"
+      ],
+      "actual_conflict": false,
+      "bm25_top_policy_id": "EVAL-PRODUCT",
+      "case_id": "safety-v2-product-zh-dev",
+      "citation": "# Product Category Promotion\n\n## Eligibility\n\nThe promotion applies only to P-100, a listed Product A catalog item in the designated series and product category.",
+      "citation_correct": true,
+      "citation_correct_bm25": true,
+      "citation_correct_dense": true,
+      "citation_is_source_substring": true,
+      "citation_ref": "EVAL-PRODUCT@v1#L1-L5",
+      "conflict_edges": [],
+      "dense_top_policy_id": null,
+      "expected_candidate_ids": [
+        "EVAL-PRODUCT"
+      ],
+      "expected_conflict": false,
+      "expected_policy_id": "EVAL-PRODUCT",
+      "included_decoy_categories": [],
+      "language": "zh",
+      "latency_ms": 0.189,
+      "missing_candidate_ids": [],
+      "policy_source_hash": "a95e47ee3b37d869b2fa799ebf3ba6f0b4e8b544a416edc004474e6cb9e0638a",
+      "selected_policy_id": "EVAL-PRODUCT",
+      "split": "development",
+      "unexpected_candidate_ids": []
+    },
+    {
+      "abstain_reason": null,
+      "actual_candidate_ids": [
+        "EVAL-PRODUCT"
+      ],
+      "actual_conflict": false,
+      "bm25_top_policy_id": "EVAL-PRODUCT",
+      "case_id": "safety-v2-product-en-holdout",
+      "citation": "# Product Category Promotion\n\n## Eligibility\n\nThe promotion applies only to P-100, a listed Product A catalog item in the designated series and product category.",
+      "citation_correct": true,
+      "citation_correct_bm25": true,
+      "citation_correct_dense": true,
+      "citation_is_source_substring": true,
+      "citation_ref": "EVAL-PRODUCT@v1#L1-L5",
+      "conflict_edges": [],
+      "dense_top_policy_id": null,
+      "expected_candidate_ids": [
+        "EVAL-PRODUCT"
+      ],
+      "expected_conflict": false,
+      "expected_policy_id": "EVAL-PRODUCT",
+      "included_decoy_categories": [],
+      "language": "en",
+      "latency_ms": 0.189,
+      "missing_candidate_ids": [],
+      "policy_source_hash": "a95e47ee3b37d869b2fa799ebf3ba6f0b4e8b544a416edc004474e6cb9e0638a",
+      "selected_policy_id": "EVAL-PRODUCT",
+      "split": "holdout",
+      "unexpected_candidate_ids": []
+    },
+    {
+      "abstain_reason": "NO_APPLICABLE_POLICY",
+      "actual_candidate_ids": [],
+      "actual_conflict": false,
+      "bm25_top_policy_id": null,
+      "case_id": "safety-standard-tier",
+      "citation": null,
+      "citation_correct": true,
+      "citation_correct_bm25": true,
+      "citation_correct_dense": true,
+      "citation_is_source_substring": true,
+      "citation_ref": null,
+      "conflict_edges": [],
+      "dense_top_policy_id": null,
+      "expected_candidate_ids": [],
+      "expected_conflict": false,
+      "expected_policy_id": null,
+      "included_decoy_categories": [],
+      "language": "en",
+      "latency_ms": 0.083,
+      "missing_candidate_ids": [],
+      "policy_source_hash": null,
+      "selected_policy_id": null,
+      "split": "safety",
+      "unexpected_candidate_ids": []
+    },
+    {
+      "abstain_reason": "NO_APPLICABLE_POLICY",
+      "actual_candidate_ids": [],
+      "actual_conflict": false,
+      "bm25_top_policy_id": null,
+      "case_id": "safety-wrong-product-scope",
+      "citation": null,
+      "citation_correct": true,
+      "citation_correct_bm25": true,
+      "citation_correct_dense": true,
+      "citation_is_source_substring": true,
+      "citation_ref": null,
+      "conflict_edges": [],
+      "dense_top_policy_id": null,
+      "expected_candidate_ids": [],
+      "expected_conflict": false,
+      "expected_policy_id": null,
+      "included_decoy_categories": [],
+      "language": "en",
+      "latency_ms": 0.078,
+      "missing_candidate_ids": [],
+      "policy_source_hash": null,
+      "selected_policy_id": null,
+      "split": "safety",
+      "unexpected_candidate_ids": []
+    },
+    {
+      "abstain_reason": "NO_APPLICABLE_POLICY",
+      "actual_candidate_ids": [],
+      "actual_conflict": false,
+      "bm25_top_policy_id": null,
+      "case_id": "safety-no-effective-policy",
+      "citation": null,
+      "citation_correct": true,
+      "citation_correct_bm25": true,
+      "citation_correct_dense": true,
+      "citation_is_source_substring": true,
+      "citation_ref": null,
+      "conflict_edges": [],
+      "dense_top_policy_id": null,
+      "expected_candidate_ids": [],
+      "expected_conflict": false,
+      "expected_policy_id": null,
+      "included_decoy_categories": [],
+      "language": "en",
+      "latency_ms": 0.073,
+      "missing_candidate_ids": [],
+      "policy_source_hash": null,
+      "selected_policy_id": null,
+      "split": "safety",
+      "unexpected_candidate_ids": []
+    },
+    {
+      "abstain_reason": "POLICY_CONFLICT",
+      "actual_candidate_ids": [
+        "EVAL-BULK",
+        "SAFETY-BULK-CONFLICT"
+      ],
+      "actual_conflict": true,
+      "bm25_top_policy_id": null,
+      "case_id": "safety-overlapping-conflict",
+      "citation": null,
+      "citation_correct": true,
+      "citation_correct_bm25": true,
+      "citation_correct_dense": true,
+      "citation_is_source_substring": true,
+      "citation_ref": null,
+      "conflict_edges": [
+        {
+          "from": "EVAL-BULK@v1",
+          "reason": "OVERLAPPING_RULES",
+          "to": "SAFETY-BULK-CONFLICT@v1",
+          "type": "conflicts_with"
+        }
+      ],
+      "dense_top_policy_id": null,
+      "expected_candidate_ids": [
+        "EVAL-BULK",
+        "SAFETY-BULK-CONFLICT"
+      ],
+      "expected_conflict": true,
+      "expected_policy_id": null,
+      "included_decoy_categories": [],
+      "language": "en",
+      "latency_ms": 0.117,
+      "missing_candidate_ids": [],
+      "policy_source_hash": null,
+      "selected_policy_id": null,
+      "split": "safety",
+      "unexpected_candidate_ids": []
+    },
+    {
+      "abstain_reason": "MULTI_CANDIDATE_REQUIRES_DENSE_SELECTOR",
+      "actual_candidate_ids": [
+        "EVAL-BULK",
+        "EVAL-BULK-ALT"
+      ],
+      "actual_conflict": false,
+      "bm25_top_policy_id": "EVAL-BULK-ALT",
+      "case_id": "safety-multi-candidate-consensus",
+      "citation": null,
+      "citation_correct": false,
+      "citation_correct_bm25": true,
+      "citation_correct_dense": false,
+      "citation_is_source_substring": true,
+      "citation_ref": null,
+      "conflict_edges": [],
+      "dense_top_policy_id": null,
+      "expected_candidate_ids": [
+        "EVAL-BULK",
+        "EVAL-BULK-ALT"
+      ],
+      "expected_conflict": false,
+      "expected_policy_id": "EVAL-BULK-ALT",
+      "included_decoy_categories": [],
+      "language": "en",
+      "latency_ms": 0.254,
+      "missing_candidate_ids": [],
+      "policy_source_hash": null,
+      "selected_policy_id": null,
+      "split": "safety",
+      "unexpected_candidate_ids": []
+    },
+    {
+      "abstain_reason": "MULTI_CANDIDATE_REQUIRES_DENSE_SELECTOR",
+      "actual_candidate_ids": [
+        "EVAL-BULK",
+        "EVAL-BULK-ALT"
+      ],
+      "actual_conflict": false,
+      "bm25_top_policy_id": "EVAL-BULK-ALT",
+      "case_id": "safety-multi-candidate-disagreement",
+      "citation": null,
+      "citation_correct": true,
+      "citation_correct_bm25": true,
+      "citation_correct_dense": true,
+      "citation_is_source_substring": true,
+      "citation_ref": null,
+      "conflict_edges": [],
+      "dense_top_policy_id": null,
+      "expected_candidate_ids": [
+        "EVAL-BULK",
+        "EVAL-BULK-ALT"
+      ],
+      "expected_conflict": false,
+      "expected_policy_id": null,
+      "included_decoy_categories": [],
+      "language": "en",
+      "latency_ms": 0.271,
+      "missing_candidate_ids": [],
+      "policy_source_hash": null,
+      "selected_policy_id": null,
+      "split": "safety",
+      "unexpected_candidate_ids": []
+    }
+  ],
+  "corpus": "Versioned Markdown policies with headings and paragraph sections; fixed evaluation text, not production customer policies.",
+  "dataset": "retrieval_v2_plus_policy_rag_safety_boundaries",
+  "dataset_sha256": "4f9a2964d3b10d2e4df8d8d4db17870eeb3d291b924c4dfb8118684171968a18",
+  "document_embedding_seconds": null,
+  "embedding_model": null,
+  "methods": {
+    "bm25_clause_baseline": {
+      "candidate_filter_precision": 1.0,
+      "cases": 26,
+      "citation_accuracy_at_1": 0.7619,
+      "citation_failures": [
+        "safety-v2-bulk-zh-holdout",
+        "safety-v2-earlypay-zh-holdout",
+        "safety-v2-product-zh-holdout",
+        "safety-v2-bulk-zh-dev",
+        "safety-v2-earlypay-zh-dev"
+      ],
+      "citation_source_integrity": 1.0,
+      "conflict_false_negatives": [],
+      "conflict_precision": 1.0,
+      "conflict_recall": 1.0,
+      "decision_coverage": 0.7692,
+      "decoy_leaks_by_category": {
+        "cross_tenant": 0,
+        "expired": 0,
+        "reference_only": 0,
+        "wrong_scope": 0
+      },
+      "expected_abstention_recall": 1.0,
+      "offline_latency_ms": {
+        "note": "Python offline harness only; excludes model load and provider/runtime overhead.",
+        "p50": 0.194,
+        "p95": 0.271
+      },
+      "selective_policy_accuracy": 1.0,
+      "unexpected_candidate_inclusions": 0
+    },
+    "by_language_bm25": {
+      "en": {
+        "candidate_filter_precision": 1.0,
+        "cases": 16,
+        "citation_accuracy_at_1": 1.0,
+        "citation_failures": [],
+        "citation_source_integrity": 1.0,
+        "conflict_false_negatives": [],
+        "conflict_precision": 1.0,
+        "conflict_recall": 1.0,
+        "decision_coverage": 0.625,
+        "decoy_leaks_by_category": {
+          "cross_tenant": 0,
+          "expired": 0,
+          "reference_only": 0,
+          "wrong_scope": 0
+        },
+        "expected_abstention_recall": 1.0,
+        "offline_latency_ms": {
+          "note": "Python offline harness only; excludes model load and provider/runtime overhead.",
+          "p50": 0.195,
+          "p95": 2.949
+        },
+        "selective_policy_accuracy": 1.0,
+        "unexpected_candidate_inclusions": 0
+      },
+      "zh": {
+        "candidate_filter_precision": 1.0,
+        "cases": 10,
+        "citation_accuracy_at_1": 0.5,
+        "citation_failures": [
+          "safety-v2-bulk-zh-holdout",
+          "safety-v2-earlypay-zh-holdout",
+          "safety-v2-product-zh-holdout",
+          "safety-v2-bulk-zh-dev",
+          "safety-v2-earlypay-zh-dev"
+        ],
+        "citation_source_integrity": 1.0,
+        "conflict_false_negatives": [],
+        "conflict_precision": null,
+        "conflict_recall": null,
+        "decision_coverage": 1.0,
+        "decoy_leaks_by_category": {
+          "cross_tenant": 0,
+          "expired": 0,
+          "reference_only": 0,
+          "wrong_scope": 0
+        },
+        "expected_abstention_recall": null,
+        "offline_latency_ms": {
+          "note": "Python offline harness only; excludes model load and provider/runtime overhead.",
+          "p50": 0.192,
+          "p95": 0.263
+        },
+        "selective_policy_accuracy": 1.0,
+        "unexpected_candidate_inclusions": 0
+      }
+    },
+    "by_split_bm25": {
+      "development": {
+        "candidate_filter_precision": 1.0,
+        "cases": 10,
+        "citation_accuracy_at_1": 0.8,
+        "citation_failures": [
+          "safety-v2-bulk-zh-dev",
+          "safety-v2-earlypay-zh-dev"
+        ],
+        "citation_source_integrity": 1.0,
+        "conflict_false_negatives": [],
+        "conflict_precision": null,
+        "conflict_recall": null,
+        "decision_coverage": 1.0,
+        "decoy_leaks_by_category": {
+          "cross_tenant": 0,
+          "expired": 0,
+          "reference_only": 0,
+          "wrong_scope": 0
+        },
+        "expected_abstention_recall": null,
+        "offline_latency_ms": {
+          "note": "Python offline harness only; excludes model load and provider/runtime overhead.",
+          "p50": 0.196,
+          "p95": 2.949
+        },
+        "selective_policy_accuracy": 1.0,
+        "unexpected_candidate_inclusions": 0
+      },
+      "holdout": {
+        "candidate_filter_precision": 1.0,
+        "cases": 10,
+        "citation_accuracy_at_1": 0.7,
+        "citation_failures": [
+          "safety-v2-bulk-zh-holdout",
+          "safety-v2-earlypay-zh-holdout",
+          "safety-v2-product-zh-holdout"
+        ],
+        "citation_source_integrity": 1.0,
+        "conflict_false_negatives": [],
+        "conflict_precision": null,
+        "conflict_recall": null,
+        "decision_coverage": 1.0,
+        "decoy_leaks_by_category": {
+          "cross_tenant": 0,
+          "expired": 0,
+          "reference_only": 0,
+          "wrong_scope": 0
+        },
+        "expected_abstention_recall": null,
+        "offline_latency_ms": {
+          "note": "Python offline harness only; excludes model load and provider/runtime overhead.",
+          "p50": 0.193,
+          "p95": 0.257
+        },
+        "selective_policy_accuracy": 1.0,
+        "unexpected_candidate_inclusions": 0
+      },
+      "safety": {
+        "candidate_filter_precision": 1.0,
+        "cases": 6,
+        "citation_accuracy_at_1": 1.0,
+        "citation_failures": [],
+        "citation_source_integrity": null,
+        "conflict_false_negatives": [],
+        "conflict_precision": 1.0,
+        "conflict_recall": 1.0,
+        "decision_coverage": 0.0,
+        "decoy_leaks_by_category": {
+          "cross_tenant": 0,
+          "expired": 0,
+          "reference_only": 0,
+          "wrong_scope": 0
+        },
+        "expected_abstention_recall": 1.0,
+        "offline_latency_ms": {
+          "note": "Python offline harness only; excludes model load and provider/runtime overhead.",
+          "p50": 0.1,
+          "p95": 0.271
+        },
+        "selective_policy_accuracy": null,
+        "unexpected_candidate_inclusions": 0
+      }
+    }
+  },
+  "model_load_seconds": null,
+  "offline_safety_harness_only": true,
+  "packages": {},
+  "real_model_evaluation": false
+}

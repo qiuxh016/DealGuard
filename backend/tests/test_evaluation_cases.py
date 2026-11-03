@@ -30,7 +30,7 @@ def test_deterministic_evaluation_case(client, case):
     overrides = case.get("overrides", {})
     with client.app.state.session_factory() as db:
         if "stock" in overrides:
-            db.get(Product, "P-100").stock = overrides["stock"]
+            db.scalar(select(Product).where(Product.id == "P-100")).stock = overrides["stock"]
         if overrides.get("expire_active_policy"):
             active = db.scalar(select(Policy).where(Policy.status == "active"))
             active.effective_to = datetime.now(timezone.utc)

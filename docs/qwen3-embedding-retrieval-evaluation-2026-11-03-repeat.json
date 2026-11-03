@@ -1,0 +1,896 @@
+{
+  "dataset_sha256": "eaf82293005b209bc32ea0c8f6eceef0deed375f6d0bef6545c98faefeb6b1e7",
+  "local_model_evaluation": {
+    "agreement_only_selection": {
+      "development": {
+        "accepted": 20,
+        "cases": 35,
+        "coverage": 0.5714285714285714,
+        "failed_case_ids": [],
+        "selective_accuracy_at_1": 1.0
+      },
+      "holdout": {
+        "accepted": 8,
+        "cases": 15,
+        "coverage": 0.5333333333333333,
+        "failed_case_ids": [],
+        "selective_accuracy_at_1": 1.0
+      }
+    },
+    "bm25_baseline": {
+      "cases": 50,
+      "citation_accuracy_at_1": 0.88,
+      "failed_case_ids": [
+        "eval-bulk-04",
+        "eval-loyalty-07",
+        "eval-earlypay-04",
+        "eval-earlypay-07",
+        "eval-season-07",
+        "eval-product-06"
+      ],
+      "mrr": 0.935,
+      "recall_at_3": 0.98
+    },
+    "by_split": {
+      "development": {
+        "cases": 35,
+        "citation_accuracy_at_1": 0.6571428571428571,
+        "failed_case_ids": [
+          "eval-loyalty-04",
+          "eval-earlypay-01",
+          "eval-earlypay-03",
+          "eval-earlypay-04",
+          "eval-earlypay-05",
+          "eval-earlypay-07",
+          "eval-season-05",
+          "eval-product-02",
+          "eval-product-03",
+          "eval-product-05",
+          "eval-product-06",
+          "eval-product-07"
+        ],
+        "mrr": 0.8142857142857143,
+        "recall_at_3": 1.0
+      },
+      "holdout": {
+        "cases": 15,
+        "citation_accuracy_at_1": 0.5333333333333333,
+        "failed_case_ids": [
+          "eval-loyalty-08",
+          "eval-loyalty-09",
+          "eval-earlypay-08",
+          "eval-season-10",
+          "eval-product-08",
+          "eval-product-09",
+          "eval-product-10"
+        ],
+        "mrr": 0.7444444444444444,
+        "recall_at_3": 1.0
+      }
+    },
+    "cases": 50,
+    "citation_accuracy_at_1": 0.62,
+    "device": "cpu",
+    "documents_embedding_seconds": 1.207,
+    "failed_case_ids": [
+      "eval-loyalty-04",
+      "eval-loyalty-08",
+      "eval-loyalty-09",
+      "eval-earlypay-01",
+      "eval-earlypay-03",
+      "eval-earlypay-04",
+      "eval-earlypay-05",
+      "eval-earlypay-07",
+      "eval-earlypay-08",
+      "eval-season-05",
+      "eval-season-10",
+      "eval-product-02",
+      "eval-product-03",
+      "eval-product-05",
+      "eval-product-06",
+      "eval-product-07",
+      "eval-product-08",
+      "eval-product-09",
+      "eval-product-10"
+    ],
+    "hybrid_bm25_qwen_rrf": {
+      "by_split": {
+        "development": {
+          "cases": 35,
+          "citation_accuracy_at_1": 0.8,
+          "failed_case_ids": [
+            "eval-loyalty-04",
+            "eval-earlypay-01",
+            "eval-earlypay-04",
+            "eval-earlypay-07",
+            "eval-product-03",
+            "eval-product-06",
+            "eval-product-07"
+          ],
+          "mrr": 0.8952380952380952,
+          "recall_at_3": 1.0
+        },
+        "holdout": {
+          "cases": 15,
+          "citation_accuracy_at_1": 0.7333333333333333,
+          "failed_case_ids": [
+            "eval-loyalty-08",
+            "eval-product-08",
+            "eval-product-09",
+            "eval-product-10"
+          ],
+          "mrr": 0.8666666666666667,
+          "recall_at_3": 1.0
+        }
+      },
+      "cases": 50,
+      "citation_accuracy_at_1": 0.78,
+      "failed_case_ids": [
+        "eval-loyalty-04",
+        "eval-loyalty-08",
+        "eval-earlypay-01",
+        "eval-earlypay-04",
+        "eval-earlypay-07",
+        "eval-product-03",
+        "eval-product-06",
+        "eval-product-07",
+        "eval-product-08",
+        "eval-product-09",
+        "eval-product-10"
+      ],
+      "mrr": 0.8866666666666667,
+      "recall_at_3": 1.0,
+      "top1_results": [
+        {
+          "case_id": "eval-bulk-01",
+          "expected_policy_id": "EVAL-BULK",
+          "retrieved_policy_id": "EVAL-BULK"
+        },
+        {
+          "case_id": "eval-bulk-02",
+          "expected_policy_id": "EVAL-BULK",
+          "retrieved_policy_id": "EVAL-BULK"
+        },
+        {
+          "case_id": "eval-bulk-03",
+          "expected_policy_id": "EVAL-BULK",
+          "retrieved_policy_id": "EVAL-BULK"
+        },
+        {
+          "case_id": "eval-bulk-04",
+          "expected_policy_id": "EVAL-BULK",
+          "retrieved_policy_id": "EVAL-BULK"
+        },
+        {
+          "case_id": "eval-bulk-05",
+          "expected_policy_id": "EVAL-BULK",
+          "retrieved_policy_id": "EVAL-BULK"
+        },
+        {
+          "case_id": "eval-bulk-06",
+          "expected_policy_id": "EVAL-BULK",
+          "retrieved_policy_id": "EVAL-BULK"
+        },
+        {
+          "case_id": "eval-bulk-07",
+          "expected_policy_id": "EVAL-BULK",
+          "retrieved_policy_id": "EVAL-BULK"
+        },
+        {
+          "case_id": "eval-bulk-08",
+          "expected_policy_id": "EVAL-BULK",
+          "retrieved_policy_id": "EVAL-BULK"
+        },
+        {
+          "case_id": "eval-bulk-09",
+          "expected_policy_id": "EVAL-BULK",
+          "retrieved_policy_id": "EVAL-BULK"
+        },
+        {
+          "case_id": "eval-bulk-10",
+          "expected_policy_id": "EVAL-BULK",
+          "retrieved_policy_id": "EVAL-BULK"
+        },
+        {
+          "case_id": "eval-loyalty-01",
+          "expected_policy_id": "EVAL-LOYALTY",
+          "retrieved_policy_id": "EVAL-LOYALTY"
+        },
+        {
+          "case_id": "eval-loyalty-02",
+          "expected_policy_id": "EVAL-LOYALTY",
+          "retrieved_policy_id": "EVAL-LOYALTY"
+        },
+        {
+          "case_id": "eval-loyalty-03",
+          "expected_policy_id": "EVAL-LOYALTY",
+          "retrieved_policy_id": "EVAL-LOYALTY"
+        },
+        {
+          "case_id": "eval-loyalty-04",
+          "expected_policy_id": "EVAL-LOYALTY",
+          "retrieved_policy_id": "EVAL-BULK"
+        },
+        {
+          "case_id": "eval-loyalty-05",
+          "expected_policy_id": "EVAL-LOYALTY",
+          "retrieved_policy_id": "EVAL-LOYALTY"
+        },
+        {
+          "case_id": "eval-loyalty-06",
+          "expected_policy_id": "EVAL-LOYALTY",
+          "retrieved_policy_id": "EVAL-LOYALTY"
+        },
+        {
+          "case_id": "eval-loyalty-07",
+          "expected_policy_id": "EVAL-LOYALTY",
+          "retrieved_policy_id": "EVAL-LOYALTY"
+        },
+        {
+          "case_id": "eval-loyalty-08",
+          "expected_policy_id": "EVAL-LOYALTY",
+          "retrieved_policy_id": "EVAL-BULK"
+        },
+        {
+          "case_id": "eval-loyalty-09",
+          "expected_policy_id": "EVAL-LOYALTY",
+          "retrieved_policy_id": "EVAL-LOYALTY"
+        },
+        {
+          "case_id": "eval-loyalty-10",
+          "expected_policy_id": "EVAL-LOYALTY",
+          "retrieved_policy_id": "EVAL-LOYALTY"
+        },
+        {
+          "case_id": "eval-earlypay-01",
+          "expected_policy_id": "EVAL-EARLYPAY",
+          "retrieved_policy_id": "EVAL-BULK"
+        },
+        {
+          "case_id": "eval-earlypay-02",
+          "expected_policy_id": "EVAL-EARLYPAY",
+          "retrieved_policy_id": "EVAL-EARLYPAY"
+        },
+        {
+          "case_id": "eval-earlypay-03",
+          "expected_policy_id": "EVAL-EARLYPAY",
+          "retrieved_policy_id": "EVAL-EARLYPAY"
+        },
+        {
+          "case_id": "eval-earlypay-04",
+          "expected_policy_id": "EVAL-EARLYPAY",
+          "retrieved_policy_id": "EVAL-BULK"
+        },
+        {
+          "case_id": "eval-earlypay-05",
+          "expected_policy_id": "EVAL-EARLYPAY",
+          "retrieved_policy_id": "EVAL-EARLYPAY"
+        },
+        {
+          "case_id": "eval-earlypay-06",
+          "expected_policy_id": "EVAL-EARLYPAY",
+          "retrieved_policy_id": "EVAL-EARLYPAY"
+        },
+        {
+          "case_id": "eval-earlypay-07",
+          "expected_policy_id": "EVAL-EARLYPAY",
+          "retrieved_policy_id": "EVAL-BULK"
+        },
+        {
+          "case_id": "eval-earlypay-08",
+          "expected_policy_id": "EVAL-EARLYPAY",
+          "retrieved_policy_id": "EVAL-EARLYPAY"
+        },
+        {
+          "case_id": "eval-earlypay-09",
+          "expected_policy_id": "EVAL-EARLYPAY",
+          "retrieved_policy_id": "EVAL-EARLYPAY"
+        },
+        {
+          "case_id": "eval-earlypay-10",
+          "expected_policy_id": "EVAL-EARLYPAY",
+          "retrieved_policy_id": "EVAL-EARLYPAY"
+        },
+        {
+          "case_id": "eval-season-01",
+          "expected_policy_id": "EVAL-SEASON",
+          "retrieved_policy_id": "EVAL-SEASON"
+        },
+        {
+          "case_id": "eval-season-02",
+          "expected_policy_id": "EVAL-SEASON",
+          "retrieved_policy_id": "EVAL-SEASON"
+        },
+        {
+          "case_id": "eval-season-03",
+          "expected_policy_id": "EVAL-SEASON",
+          "retrieved_policy_id": "EVAL-SEASON"
+        },
+        {
+          "case_id": "eval-season-04",
+          "expected_policy_id": "EVAL-SEASON",
+          "retrieved_policy_id": "EVAL-SEASON"
+        },
+        {
+          "case_id": "eval-season-05",
+          "expected_policy_id": "EVAL-SEASON",
+          "retrieved_policy_id": "EVAL-SEASON"
+        },
+        {
+          "case_id": "eval-season-06",
+          "expected_policy_id": "EVAL-SEASON",
+          "retrieved_policy_id": "EVAL-SEASON"
+        },
+        {
+          "case_id": "eval-season-07",
+          "expected_policy_id": "EVAL-SEASON",
+          "retrieved_policy_id": "EVAL-SEASON"
+        },
+        {
+          "case_id": "eval-season-08",
+          "expected_policy_id": "EVAL-SEASON",
+          "retrieved_policy_id": "EVAL-SEASON"
+        },
+        {
+          "case_id": "eval-season-09",
+          "expected_policy_id": "EVAL-SEASON",
+          "retrieved_policy_id": "EVAL-SEASON"
+        },
+        {
+          "case_id": "eval-season-10",
+          "expected_policy_id": "EVAL-SEASON",
+          "retrieved_policy_id": "EVAL-SEASON"
+        },
+        {
+          "case_id": "eval-product-01",
+          "expected_policy_id": "EVAL-PRODUCT",
+          "retrieved_policy_id": "EVAL-PRODUCT"
+        },
+        {
+          "case_id": "eval-product-02",
+          "expected_policy_id": "EVAL-PRODUCT",
+          "retrieved_policy_id": "EVAL-PRODUCT"
+        },
+        {
+          "case_id": "eval-product-03",
+          "expected_policy_id": "EVAL-PRODUCT",
+          "retrieved_policy_id": "EVAL-BULK"
+        },
+        {
+          "case_id": "eval-product-04",
+          "expected_policy_id": "EVAL-PRODUCT",
+          "retrieved_policy_id": "EVAL-PRODUCT"
+        },
+        {
+          "case_id": "eval-product-05",
+          "expected_policy_id": "EVAL-PRODUCT",
+          "retrieved_policy_id": "EVAL-PRODUCT"
+        },
+        {
+          "case_id": "eval-product-06",
+          "expected_policy_id": "EVAL-PRODUCT",
+          "retrieved_policy_id": "EVAL-BULK"
+        },
+        {
+          "case_id": "eval-product-07",
+          "expected_policy_id": "EVAL-PRODUCT",
+          "retrieved_policy_id": "EVAL-BULK"
+        },
+        {
+          "case_id": "eval-product-08",
+          "expected_policy_id": "EVAL-PRODUCT",
+          "retrieved_policy_id": "EVAL-BULK"
+        },
+        {
+          "case_id": "eval-product-09",
+          "expected_policy_id": "EVAL-PRODUCT",
+          "retrieved_policy_id": "EVAL-BULK"
+        },
+        {
+          "case_id": "eval-product-10",
+          "expected_policy_id": "EVAL-PRODUCT",
+          "retrieved_policy_id": "EVAL-BULK"
+        }
+      ]
+    },
+    "mean_query_embedding_ms": 245.42,
+    "model": "Qwen3-Embedding-0.6B",
+    "model_load_seconds": 10.021,
+    "mrr": 0.7933333333333333,
+    "packages": {
+      "sentence-transformers": "5.7.0",
+      "torch": "2.15.0",
+      "transformers": "4.57.6"
+    },
+    "queries_embedding_seconds": 12.271,
+    "recall_at_3": 1.0,
+    "similarity": "cosine (L2-normalized vectors)",
+    "top1_results": [
+      {
+        "bm25_top1": "EVAL-BULK",
+        "case_id": "eval-bulk-01",
+        "cosine_similarity": 0.6493045981641145,
+        "expected_policy_id": "EVAL-BULK",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-BULK",
+        "score_margin": 0.2160148924978229
+      },
+      {
+        "bm25_top1": "EVAL-BULK",
+        "case_id": "eval-bulk-02",
+        "cosine_similarity": 0.6661161597658768,
+        "expected_policy_id": "EVAL-BULK",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-BULK",
+        "score_margin": 0.19810131850922896
+      },
+      {
+        "bm25_top1": "EVAL-BULK",
+        "case_id": "eval-bulk-03",
+        "cosine_similarity": 0.6658902004697527,
+        "expected_policy_id": "EVAL-BULK",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-BULK",
+        "score_margin": 0.1439040371913528
+      },
+      {
+        "bm25_top1": "EVAL-EARLYPAY",
+        "case_id": "eval-bulk-04",
+        "cosine_similarity": 0.5716715329366412,
+        "expected_policy_id": "EVAL-BULK",
+        "qwen_bm25_agree": false,
+        "retrieved_policy_id": "EVAL-BULK",
+        "score_margin": 0.05210361681619635
+      },
+      {
+        "bm25_top1": "EVAL-BULK",
+        "case_id": "eval-bulk-05",
+        "cosine_similarity": 0.6589444887769268,
+        "expected_policy_id": "EVAL-BULK",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-BULK",
+        "score_margin": 0.1400793802285467
+      },
+      {
+        "bm25_top1": "EVAL-BULK",
+        "case_id": "eval-bulk-06",
+        "cosine_similarity": 0.6506276754072203,
+        "expected_policy_id": "EVAL-BULK",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-BULK",
+        "score_margin": 0.1771445005859374
+      },
+      {
+        "bm25_top1": "EVAL-BULK",
+        "case_id": "eval-bulk-07",
+        "cosine_similarity": 0.6546911649086791,
+        "expected_policy_id": "EVAL-BULK",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-BULK",
+        "score_margin": 0.17122995307048045
+      },
+      {
+        "bm25_top1": "EVAL-BULK",
+        "case_id": "eval-bulk-08",
+        "cosine_similarity": 0.681400247341314,
+        "expected_policy_id": "EVAL-BULK",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-BULK",
+        "score_margin": 0.19076669118732875
+      },
+      {
+        "bm25_top1": "EVAL-BULK",
+        "case_id": "eval-bulk-09",
+        "cosine_similarity": 0.6747106244720545,
+        "expected_policy_id": "EVAL-BULK",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-BULK",
+        "score_margin": 0.20244879043570424
+      },
+      {
+        "bm25_top1": "EVAL-BULK",
+        "case_id": "eval-bulk-10",
+        "cosine_similarity": 0.5620800410631309,
+        "expected_policy_id": "EVAL-BULK",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-BULK",
+        "score_margin": 0.03842862380737644
+      },
+      {
+        "bm25_top1": "EVAL-LOYALTY",
+        "case_id": "eval-loyalty-01",
+        "cosine_similarity": 0.7467373662042601,
+        "expected_policy_id": "EVAL-LOYALTY",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-LOYALTY",
+        "score_margin": 0.15637153503570278
+      },
+      {
+        "bm25_top1": "EVAL-LOYALTY",
+        "case_id": "eval-loyalty-02",
+        "cosine_similarity": 0.6162322465898178,
+        "expected_policy_id": "EVAL-LOYALTY",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-LOYALTY",
+        "score_margin": 0.03577285432281241
+      },
+      {
+        "bm25_top1": "EVAL-LOYALTY",
+        "case_id": "eval-loyalty-03",
+        "cosine_similarity": 0.638894457276691,
+        "expected_policy_id": "EVAL-LOYALTY",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-LOYALTY",
+        "score_margin": 0.12748414422233434
+      },
+      {
+        "bm25_top1": "EVAL-LOYALTY",
+        "case_id": "eval-loyalty-04",
+        "cosine_similarity": 0.6318007570935174,
+        "expected_policy_id": "EVAL-LOYALTY",
+        "qwen_bm25_agree": false,
+        "retrieved_policy_id": "EVAL-BULK",
+        "score_margin": 0.06107536711338557
+      },
+      {
+        "bm25_top1": "EVAL-LOYALTY",
+        "case_id": "eval-loyalty-05",
+        "cosine_similarity": 0.5647583096630442,
+        "expected_policy_id": "EVAL-LOYALTY",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-LOYALTY",
+        "score_margin": 0.026945892241808544
+      },
+      {
+        "bm25_top1": "EVAL-LOYALTY",
+        "case_id": "eval-loyalty-06",
+        "cosine_similarity": 0.6193054898723794,
+        "expected_policy_id": "EVAL-LOYALTY",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-LOYALTY",
+        "score_margin": 0.0700968826055487
+      },
+      {
+        "bm25_top1": "EVAL-EARLYPAY",
+        "case_id": "eval-loyalty-07",
+        "cosine_similarity": 0.7110211307557427,
+        "expected_policy_id": "EVAL-LOYALTY",
+        "qwen_bm25_agree": false,
+        "retrieved_policy_id": "EVAL-LOYALTY",
+        "score_margin": 0.14485421188722403
+      },
+      {
+        "bm25_top1": "EVAL-LOYALTY",
+        "case_id": "eval-loyalty-08",
+        "cosine_similarity": 0.5678200625663882,
+        "expected_policy_id": "EVAL-LOYALTY",
+        "qwen_bm25_agree": false,
+        "retrieved_policy_id": "EVAL-BULK",
+        "score_margin": 0.0323196513547499
+      },
+      {
+        "bm25_top1": "EVAL-LOYALTY",
+        "case_id": "eval-loyalty-09",
+        "cosine_similarity": 0.5409807212351961,
+        "expected_policy_id": "EVAL-LOYALTY",
+        "qwen_bm25_agree": false,
+        "retrieved_policy_id": "EVAL-BULK",
+        "score_margin": 0.01841107971116185
+      },
+      {
+        "bm25_top1": "EVAL-LOYALTY",
+        "case_id": "eval-loyalty-10",
+        "cosine_similarity": 0.5817635655955457,
+        "expected_policy_id": "EVAL-LOYALTY",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-LOYALTY",
+        "score_margin": 0.04864493850550511
+      },
+      {
+        "bm25_top1": "EVAL-EARLYPAY",
+        "case_id": "eval-earlypay-01",
+        "cosine_similarity": 0.6703531710493791,
+        "expected_policy_id": "EVAL-EARLYPAY",
+        "qwen_bm25_agree": false,
+        "retrieved_policy_id": "EVAL-BULK",
+        "score_margin": 0.048830767247354134
+      },
+      {
+        "bm25_top1": "EVAL-EARLYPAY",
+        "case_id": "eval-earlypay-02",
+        "cosine_similarity": 0.5944741807807653,
+        "expected_policy_id": "EVAL-EARLYPAY",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-EARLYPAY",
+        "score_margin": 0.052959874187414546
+      },
+      {
+        "bm25_top1": "EVAL-EARLYPAY",
+        "case_id": "eval-earlypay-03",
+        "cosine_similarity": 0.5767639644668502,
+        "expected_policy_id": "EVAL-EARLYPAY",
+        "qwen_bm25_agree": false,
+        "retrieved_policy_id": "EVAL-BULK",
+        "score_margin": 0.04973361377598695
+      },
+      {
+        "bm25_top1": "EVAL-LOYALTY",
+        "case_id": "eval-earlypay-04",
+        "cosine_similarity": 0.5776699194506707,
+        "expected_policy_id": "EVAL-EARLYPAY",
+        "qwen_bm25_agree": false,
+        "retrieved_policy_id": "EVAL-BULK",
+        "score_margin": 0.06711792539747319
+      },
+      {
+        "bm25_top1": "EVAL-EARLYPAY",
+        "case_id": "eval-earlypay-05",
+        "cosine_similarity": 0.5436454448812317,
+        "expected_policy_id": "EVAL-EARLYPAY",
+        "qwen_bm25_agree": false,
+        "retrieved_policy_id": "EVAL-BULK",
+        "score_margin": 0.08584667152789688
+      },
+      {
+        "bm25_top1": "EVAL-EARLYPAY",
+        "case_id": "eval-earlypay-06",
+        "cosine_similarity": 0.5407019396881738,
+        "expected_policy_id": "EVAL-EARLYPAY",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-EARLYPAY",
+        "score_margin": 0.003224697142102495
+      },
+      {
+        "bm25_top1": "EVAL-PRODUCT",
+        "case_id": "eval-earlypay-07",
+        "cosine_similarity": 0.5679807026931956,
+        "expected_policy_id": "EVAL-EARLYPAY",
+        "qwen_bm25_agree": false,
+        "retrieved_policy_id": "EVAL-BULK",
+        "score_margin": 0.019145702701501066
+      },
+      {
+        "bm25_top1": "EVAL-EARLYPAY",
+        "case_id": "eval-earlypay-08",
+        "cosine_similarity": 0.5930790592014293,
+        "expected_policy_id": "EVAL-EARLYPAY",
+        "qwen_bm25_agree": false,
+        "retrieved_policy_id": "EVAL-BULK",
+        "score_margin": 0.06157684864736679
+      },
+      {
+        "bm25_top1": "EVAL-EARLYPAY",
+        "case_id": "eval-earlypay-09",
+        "cosine_similarity": 0.596749178095773,
+        "expected_policy_id": "EVAL-EARLYPAY",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-EARLYPAY",
+        "score_margin": 0.0024018661578549816
+      },
+      {
+        "bm25_top1": "EVAL-EARLYPAY",
+        "case_id": "eval-earlypay-10",
+        "cosine_similarity": 0.5973173672213965,
+        "expected_policy_id": "EVAL-EARLYPAY",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-EARLYPAY",
+        "score_margin": 0.023468934347200876
+      },
+      {
+        "bm25_top1": "EVAL-SEASON",
+        "case_id": "eval-season-01",
+        "cosine_similarity": 0.6922427094544066,
+        "expected_policy_id": "EVAL-SEASON",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-SEASON",
+        "score_margin": 0.07412748754640464
+      },
+      {
+        "bm25_top1": "EVAL-SEASON",
+        "case_id": "eval-season-02",
+        "cosine_similarity": 0.6107122131157806,
+        "expected_policy_id": "EVAL-SEASON",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-SEASON",
+        "score_margin": 0.051152569164496065
+      },
+      {
+        "bm25_top1": "EVAL-SEASON",
+        "case_id": "eval-season-03",
+        "cosine_similarity": 0.6380184876277527,
+        "expected_policy_id": "EVAL-SEASON",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-SEASON",
+        "score_margin": 0.09772622655301355
+      },
+      {
+        "bm25_top1": "EVAL-SEASON",
+        "case_id": "eval-season-04",
+        "cosine_similarity": 0.5786232976016683,
+        "expected_policy_id": "EVAL-SEASON",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-SEASON",
+        "score_margin": 0.02301617588975946
+      },
+      {
+        "bm25_top1": "EVAL-SEASON",
+        "case_id": "eval-season-05",
+        "cosine_similarity": 0.5736207343859485,
+        "expected_policy_id": "EVAL-SEASON",
+        "qwen_bm25_agree": false,
+        "retrieved_policy_id": "EVAL-BULK",
+        "score_margin": 0.04509928234318483
+      },
+      {
+        "bm25_top1": "EVAL-SEASON",
+        "case_id": "eval-season-06",
+        "cosine_similarity": 0.5877559289421047,
+        "expected_policy_id": "EVAL-SEASON",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-SEASON",
+        "score_margin": 0.06790819130493664
+      },
+      {
+        "bm25_top1": "EVAL-LOYALTY",
+        "case_id": "eval-season-07",
+        "cosine_similarity": 0.6294776192301992,
+        "expected_policy_id": "EVAL-SEASON",
+        "qwen_bm25_agree": false,
+        "retrieved_policy_id": "EVAL-SEASON",
+        "score_margin": 0.05862493567333782
+      },
+      {
+        "bm25_top1": "EVAL-SEASON",
+        "case_id": "eval-season-08",
+        "cosine_similarity": 0.6663134849106146,
+        "expected_policy_id": "EVAL-SEASON",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-SEASON",
+        "score_margin": 0.08898480561216904
+      },
+      {
+        "bm25_top1": "EVAL-SEASON",
+        "case_id": "eval-season-09",
+        "cosine_similarity": 0.5710984306751439,
+        "expected_policy_id": "EVAL-SEASON",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-SEASON",
+        "score_margin": 0.031668175333617876
+      },
+      {
+        "bm25_top1": "EVAL-SEASON",
+        "case_id": "eval-season-10",
+        "cosine_similarity": 0.567965834859026,
+        "expected_policy_id": "EVAL-SEASON",
+        "qwen_bm25_agree": false,
+        "retrieved_policy_id": "EVAL-BULK",
+        "score_margin": 0.06651103539474179
+      },
+      {
+        "bm25_top1": "EVAL-PRODUCT",
+        "case_id": "eval-product-01",
+        "cosine_similarity": 0.5845477542295869,
+        "expected_policy_id": "EVAL-PRODUCT",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-PRODUCT",
+        "score_margin": 0.010845017915959043
+      },
+      {
+        "bm25_top1": "EVAL-PRODUCT",
+        "case_id": "eval-product-02",
+        "cosine_similarity": 0.5527166141768537,
+        "expected_policy_id": "EVAL-PRODUCT",
+        "qwen_bm25_agree": false,
+        "retrieved_policy_id": "EVAL-SEASON",
+        "score_margin": 0.014504831387963768
+      },
+      {
+        "bm25_top1": "EVAL-PRODUCT",
+        "case_id": "eval-product-03",
+        "cosine_similarity": 0.5632881476749717,
+        "expected_policy_id": "EVAL-PRODUCT",
+        "qwen_bm25_agree": false,
+        "retrieved_policy_id": "EVAL-BULK",
+        "score_margin": 0.011755420998216137
+      },
+      {
+        "bm25_top1": "EVAL-PRODUCT",
+        "case_id": "eval-product-04",
+        "cosine_similarity": 0.5572830366166455,
+        "expected_policy_id": "EVAL-PRODUCT",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-PRODUCT",
+        "score_margin": 0.010826034190716816
+      },
+      {
+        "bm25_top1": "EVAL-PRODUCT",
+        "case_id": "eval-product-05",
+        "cosine_similarity": 0.5485852330333387,
+        "expected_policy_id": "EVAL-PRODUCT",
+        "qwen_bm25_agree": false,
+        "retrieved_policy_id": "EVAL-BULK",
+        "score_margin": 0.03397354724955781
+      },
+      {
+        "bm25_top1": "EVAL-EARLYPAY",
+        "case_id": "eval-product-06",
+        "cosine_similarity": 0.5803972803449291,
+        "expected_policy_id": "EVAL-PRODUCT",
+        "qwen_bm25_agree": false,
+        "retrieved_policy_id": "EVAL-BULK",
+        "score_margin": 0.019047881576973236
+      },
+      {
+        "bm25_top1": "EVAL-PRODUCT",
+        "case_id": "eval-product-07",
+        "cosine_similarity": 0.5784176210455277,
+        "expected_policy_id": "EVAL-PRODUCT",
+        "qwen_bm25_agree": false,
+        "retrieved_policy_id": "EVAL-BULK",
+        "score_margin": 0.007825373519585122
+      },
+      {
+        "bm25_top1": "EVAL-PRODUCT",
+        "case_id": "eval-product-08",
+        "cosine_similarity": 0.5806061835192668,
+        "expected_policy_id": "EVAL-PRODUCT",
+        "qwen_bm25_agree": false,
+        "retrieved_policy_id": "EVAL-BULK",
+        "score_margin": 0.04286534172247347
+      },
+      {
+        "bm25_top1": "EVAL-PRODUCT",
+        "case_id": "eval-product-09",
+        "cosine_similarity": 0.5784596015510798,
+        "expected_policy_id": "EVAL-PRODUCT",
+        "qwen_bm25_agree": false,
+        "retrieved_policy_id": "EVAL-BULK",
+        "score_margin": 0.0070424862941422806
+      },
+      {
+        "bm25_top1": "EVAL-PRODUCT",
+        "case_id": "eval-product-10",
+        "cosine_similarity": 0.619445035262087,
+        "expected_policy_id": "EVAL-PRODUCT",
+        "qwen_bm25_agree": false,
+        "retrieved_policy_id": "EVAL-BULK",
+        "score_margin": 0.07474087118006645
+      }
+    ]
+  },
+  "methods": {
+    "bm25": {
+      "cases": 50,
+      "citation_accuracy_at_1": 0.88,
+      "failed_case_ids": [
+        "eval-bulk-04",
+        "eval-loyalty-07",
+        "eval-earlypay-04",
+        "eval-earlypay-07",
+        "eval-season-07",
+        "eval-product-06"
+      ],
+      "mrr": 0.935,
+      "recall_at_3": 0.98
+    },
+    "deterministic_dense_test_adapter": {
+      "cases": 50,
+      "citation_accuracy_at_1": 1.0,
+      "failed_case_ids": [],
+      "mrr": 1.0,
+      "recall_at_3": 1.0
+    },
+    "rrf": {
+      "cases": 50,
+      "citation_accuracy_at_1": 0.98,
+      "failed_case_ids": [
+        "eval-earlypay-07"
+      ],
+      "mrr": 0.99,
+      "recall_at_3": 1.0
+    }
+  },
+  "offline_test_adapter_only": true,
+  "real_model_evaluation": false,
+  "split": "all"
+}

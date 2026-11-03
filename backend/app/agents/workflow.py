@@ -14,6 +14,7 @@ from app.db.models import Customer, DemoActor, Policy, Product, QuoteDraft
 from app.guards.business_rules import evaluate_quote_with_trace
 from app.schemas.deal import ActionProposal, InquiryIntent, PolicyEvidence, QuoteItemIntent, TraceEvent
 from app.rag.provenance import quote_provenance
+from app.services.inventory import aggregate_inventory_failure
 
 
 class WorkflowStepFailure(RuntimeError):
@@ -481,6 +482,16 @@ def _validate(state: DealGuardState) -> dict[str, Any]:
         if len({product.currency for product in products}) > 1:
             decision = {"decision": "DENY", "reason_code": "MIXED_CURRENCY_UNSUPPORTED", "policy_id": None, "policy_version": None, "human_message": "All items in one quote must use the same currency."}
             return {"decision": decision, "breakdown": None, "status": "completed", "events": state.get("events", []) + [_event("validate_proposal", "denied", decision["human_message"], {"reason_code": decision["reason_code"]})]}
+        inventory_failure = aggregate_inventory_failure(
+            (item.product_id, item.quantity, product.stock)
+            for item, product in zip(intent.items, products, strict=True)
+        )
+        if inventory_failure:
+            product_id, requested_quantity, available_stock = inventory_failure
+            decision = {"decision": "DENY", "reason_code": "INSUFFICIENT_STOCK", "policy_id": policy.policy_id if policy else None,
+                        "policy_version": policy.version if policy else None,
+                        "human_message": f"Requested quantity {requested_quantity} for {product_id} exceeds the {available_stock} units currently available."}
+            return {"decision": decision, "breakdown": None, "status": "completed", "events": state.get("events", []) + [_event("validate_proposal", "denied", decision["human_message"], {"reason_code": decision["reason_code"], "product_id": product_id, "requested_quantity": requested_quantity, "available_stock": available_stock})]}
         line_results, decisions = [], []
         for item, product in zip(intent.items, products):
             proposal = ActionProposal(customer_id=customer.id, product_id=product.id, quantity=item.quantity, requested_discount_pct=item.requested_discount_pct)
@@ -554,7 +565,7 @@ def _save_quote(state: DealGuardState) -> dict[str, Any]:
         subtotal = sum((Decimal(line["subtotal"]) for line in lines), Decimal("0"))
         discount_amount = sum((Decimal(line["discount_amount"]) for line in lines), Decimal("0"))
         total = sum((Decimal(line["total"]) for line in lines), Decimal("0"))
-        row = QuoteDraft(tenant_id=state["actor"].tenant_id, owner_actor_id=state["actor"].id, customer_id=state["proposal"]["customer_id"], product_id=first["product_id"], quantity=sum(line["quantity"] for line in lines), unit_price=Decimal(first["unit_price"]), discount_pct=Decimal(first["discount_pct"]), subtotal=subtotal, discount_amount=discount_amount, total=total, policy_id=first["policy_id"], policy_version=first["policy_version"], policy_scope=state["intent"]["policy_scope"], lines=lines, status="DRAFT")
+        row = QuoteDraft(tenant_id=state["actor"].tenant_id, owner_actor_id=state["actor"].id, customer_id=state["proposal"]["customer_id"], product_key=state["products"][0].internal_id, product_id=first["product_id"], quantity=sum(line["quantity"] for line in lines), unit_price=Decimal(first["unit_price"]), discount_pct=Decimal(first["discount_pct"]), subtotal=subtotal, discount_amount=discount_amount, total=total, policy_id=first["policy_id"], policy_version=first["policy_version"], policy_scope=state["intent"]["policy_scope"], lines=lines, status="DRAFT")
         db.add(row); db.flush(); db.refresh(row)
         quote = {"id": row.id, "status": "DRAFT", "customer_id": row.customer_id, "product_id": row.product_id, "breakdown": {"currency": first["currency"], "unit_price": str(row.unit_price), "quantity": row.quantity, "discount_pct": str(row.discount_pct), "subtotal": str(row.subtotal), "discount_amount": str(row.discount_amount), "total": str(row.total)}, "policy_id": row.policy_id, "policy_version": row.policy_version, "policy_scope": row.policy_scope, "created_at": row.created_at.isoformat(), "lines": lines}
         return {"quote": quote, "events": state.get("events", []) + [_event("create_quote_draft", "completed", "Created a quote draft after every line passed Guard.", {"quote_id": row.id, "line_count": len(lines)})]}
@@ -563,7 +574,7 @@ def _save_quote(state: DealGuardState) -> dict[str, Any]:
     row = QuoteDraft(
         tenant_id=state["actor"].tenant_id,
         owner_actor_id=state["actor"].id, customer_id=proposal.customer_id,
-        product_id=proposal.product_id, quantity=proposal.quantity,
+        product_key=product.internal_id, product_id=product.sku, quantity=proposal.quantity,
         unit_price=product.unit_price, discount_pct=proposal.requested_discount_pct,
         subtotal=breakdown["subtotal"], discount_amount=breakdown["discount_amount"],
         total=breakdown["total"], policy_id=policy.policy_id,

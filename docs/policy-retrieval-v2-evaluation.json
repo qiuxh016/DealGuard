@@ -1,0 +1,442 @@
+{
+  "dataset": "retrieval_v2",
+  "dataset_sha256": "8fdfa134c2a3d0fd5c52532980112e074e6c1906a569f05ce3d850ec322aaa06",
+  "local_model_evaluation": {
+    "agreement_only_selection": {
+      "development": {
+        "accepted": 7,
+        "cases": 10,
+        "coverage": 0.7,
+        "failed_case_ids": [],
+        "selective_accuracy_at_1": 1.0
+      },
+      "holdout": {
+        "accepted": 7,
+        "cases": 10,
+        "coverage": 0.7,
+        "failed_case_ids": [],
+        "selective_accuracy_at_1": 1.0
+      }
+    },
+    "bm25_baseline": {
+      "cases": 20,
+      "citation_accuracy_at_1": 0.7,
+      "failed_case_ids": [
+        "v2-loyalty-zh-dev",
+        "v2-earlypay-zh-holdout",
+        "v2-product-zh-holdout",
+        "v2-loyalty-zh-holdout",
+        "v2-earlypay-zh-dev",
+        "v2-product-zh-dev"
+      ],
+      "mrr": 0.8041666666666666,
+      "recall_at_3": 0.85
+    },
+    "by_split": {
+      "development": {
+        "cases": 10,
+        "citation_accuracy_at_1": 1.0,
+        "failed_case_ids": [],
+        "mrr": 1.0,
+        "recall_at_3": 1.0
+      },
+      "holdout": {
+        "cases": 10,
+        "citation_accuracy_at_1": 1.0,
+        "failed_case_ids": [],
+        "mrr": 1.0,
+        "recall_at_3": 1.0
+      }
+    },
+    "cases": 20,
+    "citation_accuracy_at_1": 1.0,
+    "device": "cpu",
+    "documents_embedding_seconds": 1.178,
+    "failed_case_ids": [],
+    "hybrid_bm25_qwen_rrf": {
+      "by_split": {
+        "development": {
+          "cases": 10,
+          "citation_accuracy_at_1": 0.7,
+          "failed_case_ids": [
+            "v2-loyalty-zh-dev",
+            "v2-earlypay-zh-dev",
+            "v2-product-zh-dev"
+          ],
+          "mrr": 0.85,
+          "recall_at_3": 1.0
+        },
+        "holdout": {
+          "cases": 10,
+          "citation_accuracy_at_1": 0.7,
+          "failed_case_ids": [
+            "v2-earlypay-zh-holdout",
+            "v2-product-zh-holdout",
+            "v2-loyalty-zh-holdout"
+          ],
+          "mrr": 0.8333333333333334,
+          "recall_at_3": 1.0
+        }
+      },
+      "cases": 20,
+      "citation_accuracy_at_1": 0.7,
+      "failed_case_ids": [
+        "v2-loyalty-zh-dev",
+        "v2-earlypay-zh-holdout",
+        "v2-product-zh-holdout",
+        "v2-loyalty-zh-holdout",
+        "v2-earlypay-zh-dev",
+        "v2-product-zh-dev"
+      ],
+      "mrr": 0.8416666666666666,
+      "recall_at_3": 1.0,
+      "top1_results": [
+        {
+          "case_id": "v2-bulk-en-dev",
+          "expected_policy_id": "EVAL-BULK",
+          "retrieved_policy_id": "EVAL-BULK"
+        },
+        {
+          "case_id": "v2-bulk-zh-holdout",
+          "expected_policy_id": "EVAL-BULK",
+          "retrieved_policy_id": "EVAL-BULK"
+        },
+        {
+          "case_id": "v2-loyalty-zh-dev",
+          "expected_policy_id": "EVAL-LOYALTY",
+          "retrieved_policy_id": "EVAL-BULK"
+        },
+        {
+          "case_id": "v2-loyalty-en-holdout",
+          "expected_policy_id": "EVAL-LOYALTY",
+          "retrieved_policy_id": "EVAL-LOYALTY"
+        },
+        {
+          "case_id": "v2-earlypay-en-dev",
+          "expected_policy_id": "EVAL-EARLYPAY",
+          "retrieved_policy_id": "EVAL-EARLYPAY"
+        },
+        {
+          "case_id": "v2-earlypay-zh-holdout",
+          "expected_policy_id": "EVAL-EARLYPAY",
+          "retrieved_policy_id": "EVAL-BULK"
+        },
+        {
+          "case_id": "v2-season-zh-dev",
+          "expected_policy_id": "EVAL-SEASON",
+          "retrieved_policy_id": "EVAL-SEASON"
+        },
+        {
+          "case_id": "v2-season-en-holdout",
+          "expected_policy_id": "EVAL-SEASON",
+          "retrieved_policy_id": "EVAL-SEASON"
+        },
+        {
+          "case_id": "v2-product-en-dev",
+          "expected_policy_id": "EVAL-PRODUCT",
+          "retrieved_policy_id": "EVAL-PRODUCT"
+        },
+        {
+          "case_id": "v2-product-zh-holdout",
+          "expected_policy_id": "EVAL-PRODUCT",
+          "retrieved_policy_id": "EVAL-BULK"
+        },
+        {
+          "case_id": "v2-bulk-zh-dev",
+          "expected_policy_id": "EVAL-BULK",
+          "retrieved_policy_id": "EVAL-BULK"
+        },
+        {
+          "case_id": "v2-bulk-en-holdout",
+          "expected_policy_id": "EVAL-BULK",
+          "retrieved_policy_id": "EVAL-BULK"
+        },
+        {
+          "case_id": "v2-loyalty-en-dev",
+          "expected_policy_id": "EVAL-LOYALTY",
+          "retrieved_policy_id": "EVAL-LOYALTY"
+        },
+        {
+          "case_id": "v2-loyalty-zh-holdout",
+          "expected_policy_id": "EVAL-LOYALTY",
+          "retrieved_policy_id": "EVAL-SEASON"
+        },
+        {
+          "case_id": "v2-earlypay-zh-dev",
+          "expected_policy_id": "EVAL-EARLYPAY",
+          "retrieved_policy_id": "EVAL-BULK"
+        },
+        {
+          "case_id": "v2-earlypay-en-holdout",
+          "expected_policy_id": "EVAL-EARLYPAY",
+          "retrieved_policy_id": "EVAL-EARLYPAY"
+        },
+        {
+          "case_id": "v2-season-en-dev",
+          "expected_policy_id": "EVAL-SEASON",
+          "retrieved_policy_id": "EVAL-SEASON"
+        },
+        {
+          "case_id": "v2-season-zh-holdout",
+          "expected_policy_id": "EVAL-SEASON",
+          "retrieved_policy_id": "EVAL-SEASON"
+        },
+        {
+          "case_id": "v2-product-zh-dev",
+          "expected_policy_id": "EVAL-PRODUCT",
+          "retrieved_policy_id": "EVAL-BULK"
+        },
+        {
+          "case_id": "v2-product-en-holdout",
+          "expected_policy_id": "EVAL-PRODUCT",
+          "retrieved_policy_id": "EVAL-PRODUCT"
+        }
+      ]
+    },
+    "mean_query_embedding_ms": 220.0,
+    "model": "Qwen3-Embedding-0.6B",
+    "model_load_seconds": 8.907,
+    "mrr": 1.0,
+    "packages": {
+      "sentence-transformers": "5.7.0",
+      "torch": "2.15.0",
+      "transformers": "4.57.6"
+    },
+    "queries_embedding_seconds": 4.4,
+    "recall_at_3": 1.0,
+    "similarity": "cosine (L2-normalized vectors)",
+    "top1_results": [
+      {
+        "bm25_top1": "EVAL-BULK",
+        "case_id": "v2-bulk-en-dev",
+        "cosine_similarity": 0.6118317729187113,
+        "expected_policy_id": "EVAL-BULK",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-BULK",
+        "score_margin": 0.1478150290277102
+      },
+      {
+        "bm25_top1": "EVAL-BULK",
+        "case_id": "v2-bulk-zh-holdout",
+        "cosine_similarity": 0.6796842857300581,
+        "expected_policy_id": "EVAL-BULK",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-BULK",
+        "score_margin": 0.20918997026341046
+      },
+      {
+        "bm25_top1": "EVAL-BULK",
+        "case_id": "v2-loyalty-zh-dev",
+        "cosine_similarity": 0.5512533351918579,
+        "expected_policy_id": "EVAL-LOYALTY",
+        "qwen_bm25_agree": false,
+        "retrieved_policy_id": "EVAL-LOYALTY",
+        "score_margin": 0.09081958158884268
+      },
+      {
+        "bm25_top1": "EVAL-LOYALTY",
+        "case_id": "v2-loyalty-en-holdout",
+        "cosine_similarity": 0.686276142019548,
+        "expected_policy_id": "EVAL-LOYALTY",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-LOYALTY",
+        "score_margin": 0.20051922444157333
+      },
+      {
+        "bm25_top1": "EVAL-EARLYPAY",
+        "case_id": "v2-earlypay-en-dev",
+        "cosine_similarity": 0.6694673290892938,
+        "expected_policy_id": "EVAL-EARLYPAY",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-EARLYPAY",
+        "score_margin": 0.2092411838192793
+      },
+      {
+        "bm25_top1": "EVAL-BULK",
+        "case_id": "v2-earlypay-zh-holdout",
+        "cosine_similarity": 0.6252429346246955,
+        "expected_policy_id": "EVAL-EARLYPAY",
+        "qwen_bm25_agree": false,
+        "retrieved_policy_id": "EVAL-EARLYPAY",
+        "score_margin": 0.19722795631367795
+      },
+      {
+        "bm25_top1": "EVAL-SEASON",
+        "case_id": "v2-season-zh-dev",
+        "cosine_similarity": 0.7127679267246321,
+        "expected_policy_id": "EVAL-SEASON",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-SEASON",
+        "score_margin": 0.14884352720314697
+      },
+      {
+        "bm25_top1": "EVAL-SEASON",
+        "case_id": "v2-season-en-holdout",
+        "cosine_similarity": 0.7532381883246778,
+        "expected_policy_id": "EVAL-SEASON",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-SEASON",
+        "score_margin": 0.18175162910793563
+      },
+      {
+        "bm25_top1": "EVAL-PRODUCT",
+        "case_id": "v2-product-en-dev",
+        "cosine_similarity": 0.6363066886711699,
+        "expected_policy_id": "EVAL-PRODUCT",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-PRODUCT",
+        "score_margin": 0.1429490328549451
+      },
+      {
+        "bm25_top1": "EVAL-BULK",
+        "case_id": "v2-product-zh-holdout",
+        "cosine_similarity": 0.6273964485892135,
+        "expected_policy_id": "EVAL-PRODUCT",
+        "qwen_bm25_agree": false,
+        "retrieved_policy_id": "EVAL-PRODUCT",
+        "score_margin": 0.08365678069346516
+      },
+      {
+        "bm25_top1": "EVAL-BULK",
+        "case_id": "v2-bulk-zh-dev",
+        "cosine_similarity": 0.6779399864009876,
+        "expected_policy_id": "EVAL-BULK",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-BULK",
+        "score_margin": 0.20716713492219824
+      },
+      {
+        "bm25_top1": "EVAL-BULK",
+        "case_id": "v2-bulk-en-holdout",
+        "cosine_similarity": 0.6750153371947244,
+        "expected_policy_id": "EVAL-BULK",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-BULK",
+        "score_margin": 0.2706818558048735
+      },
+      {
+        "bm25_top1": "EVAL-LOYALTY",
+        "case_id": "v2-loyalty-en-dev",
+        "cosine_similarity": 0.6904026731349052,
+        "expected_policy_id": "EVAL-LOYALTY",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-LOYALTY",
+        "score_margin": 0.14399322960357563
+      },
+      {
+        "bm25_top1": "EVAL-SEASON",
+        "case_id": "v2-loyalty-zh-holdout",
+        "cosine_similarity": 0.6768286616664864,
+        "expected_policy_id": "EVAL-LOYALTY",
+        "qwen_bm25_agree": false,
+        "retrieved_policy_id": "EVAL-LOYALTY",
+        "score_margin": 0.1279378639282055
+      },
+      {
+        "bm25_top1": "EVAL-BULK",
+        "case_id": "v2-earlypay-zh-dev",
+        "cosine_similarity": 0.6088124792735605,
+        "expected_policy_id": "EVAL-EARLYPAY",
+        "qwen_bm25_agree": false,
+        "retrieved_policy_id": "EVAL-EARLYPAY",
+        "score_margin": 0.1864621098556401
+      },
+      {
+        "bm25_top1": "EVAL-EARLYPAY",
+        "case_id": "v2-earlypay-en-holdout",
+        "cosine_similarity": 0.6307502683027568,
+        "expected_policy_id": "EVAL-EARLYPAY",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-EARLYPAY",
+        "score_margin": 0.11537093589506231
+      },
+      {
+        "bm25_top1": "EVAL-SEASON",
+        "case_id": "v2-season-en-dev",
+        "cosine_similarity": 0.7302642517083996,
+        "expected_policy_id": "EVAL-SEASON",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-SEASON",
+        "score_margin": 0.12837264473859988
+      },
+      {
+        "bm25_top1": "EVAL-SEASON",
+        "case_id": "v2-season-zh-holdout",
+        "cosine_similarity": 0.7230467856080453,
+        "expected_policy_id": "EVAL-SEASON",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-SEASON",
+        "score_margin": 0.1672460474046007
+      },
+      {
+        "bm25_top1": "EVAL-BULK",
+        "case_id": "v2-product-zh-dev",
+        "cosine_similarity": 0.5356418717035697,
+        "expected_policy_id": "EVAL-PRODUCT",
+        "qwen_bm25_agree": false,
+        "retrieved_policy_id": "EVAL-PRODUCT",
+        "score_margin": 0.015432690638699231
+      },
+      {
+        "bm25_top1": "EVAL-PRODUCT",
+        "case_id": "v2-product-en-holdout",
+        "cosine_similarity": 0.5448751127515328,
+        "expected_policy_id": "EVAL-PRODUCT",
+        "qwen_bm25_agree": true,
+        "retrieved_policy_id": "EVAL-PRODUCT",
+        "score_margin": 0.024519544985375785
+      }
+    ]
+  },
+  "methods": {
+    "bm25": {
+      "cases": 20,
+      "citation_accuracy_at_1": 0.7,
+      "failed_case_ids": [
+        "v2-loyalty-zh-dev",
+        "v2-earlypay-zh-holdout",
+        "v2-product-zh-holdout",
+        "v2-loyalty-zh-holdout",
+        "v2-earlypay-zh-dev",
+        "v2-product-zh-dev"
+      ],
+      "mrr": 0.8041666666666666,
+      "recall_at_3": 0.85
+    },
+    "deterministic_dense_test_adapter": {
+      "cases": 20,
+      "citation_accuracy_at_1": 0.6,
+      "failed_case_ids": [
+        "v2-loyalty-zh-dev",
+        "v2-earlypay-zh-holdout",
+        "v2-season-zh-dev",
+        "v2-product-zh-holdout",
+        "v2-loyalty-zh-holdout",
+        "v2-earlypay-zh-dev",
+        "v2-season-zh-holdout",
+        "v2-product-zh-dev"
+      ],
+      "mrr": 0.7283333333333333,
+      "recall_at_3": 0.8
+    },
+    "rrf": {
+      "cases": 20,
+      "citation_accuracy_at_1": 0.6,
+      "failed_case_ids": [
+        "v2-loyalty-zh-dev",
+        "v2-earlypay-zh-holdout",
+        "v2-season-zh-dev",
+        "v2-product-zh-holdout",
+        "v2-loyalty-zh-holdout",
+        "v2-earlypay-zh-dev",
+        "v2-season-zh-holdout",
+        "v2-product-zh-dev"
+      ],
+      "mrr": 0.7375,
+      "recall_at_3": 0.85
+    }
+  },
+  "offline_test_adapter_only": true,
+  "real_model_evaluation": false,
+  "split": "all"
+}

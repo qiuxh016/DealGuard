@@ -6,10 +6,11 @@ export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
   reporter: "list",
+  expect: { timeout: 15_000 },
   use: {
     baseURL: "http://127.0.0.1:3001",
     ...devices["Desktop Chrome"],
-    ...(process.env.CI ? {} : { channel: "chrome" as const }),
+    ...(process.env.CI && process.env.PLAYWRIGHT_CHANNEL !== "chrome" ? {} : { channel: "chrome" as const }),
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
   },

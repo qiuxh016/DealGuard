@@ -1,0 +1,61 @@
+{
+  "base_url_host": "api.deepseek.com",
+  "cases": 12,
+  "dataset": "edge_v2",
+  "dataset_sha256": "7e94a8dbfc3326929e138039e2542f3818d1c0aff9faed28678062aaa30116dd",
+  "generated_at": "2026-11-03T05:28:44.732553+00:00",
+  "model": "deepseek-flash",
+  "packages": {
+    "langchain-openai": "1.7.3",
+    "openai": "3.42.1"
+  },
+  "runs": [
+    {
+      "by_language": {
+        "en": {
+          "cases": 8,
+          "exact_match_rate": 1.0,
+          "exact_matches": 8
+        },
+        "zh": {
+          "cases": 4,
+          "exact_match_rate": 1.0,
+          "exact_matches": 4
+        }
+      },
+      "by_split": {
+        "development": {
+          "cases": 12,
+          "exact_match_rate": 1.0,
+          "exact_matches": 12,
+          "successful_calls": 12
+        }
+      },
+      "cases": 12,
+      "exact_match_rate": 1.0,
+      "exact_matches": 12,
+      "failed_calls": 0,
+      "failures": [],
+      "field_accuracy": {
+        "customer_message_matches": 1.0,
+        "discounts": 1.0,
+        "item_count": 1.0,
+        "product_ids": 1.0,
+        "quantities": 1.0
+      },
+      "latency_ms": {
+        "mean": 1115.2,
+        "p50": 1063.7,
+        "p95": 1298.0
+      },
+      "run": 1,
+      "successful_calls": 12,
+      "tokens": {
+        "input": 7931,
+        "output": 1209,
+        "total": 9140
+      }
+    }
+  ],
+  "split": "development"
+}

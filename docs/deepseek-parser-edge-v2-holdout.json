@@ -1,0 +1,107 @@
+{
+  "base_url_host": "api.deepseek.com",
+  "cases": 6,
+  "dataset": "edge_v2",
+  "dataset_sha256": "7e94a8dbfc3326929e138039e2542f3818d1c0aff9faed28678062aaa30116dd",
+  "generated_at": "2026-11-03T05:29:03.810634+00:00",
+  "model": "deepseek-flash",
+  "packages": {
+    "langchain-openai": "1.7.3",
+    "openai": "3.42.1"
+  },
+  "runs": [
+    {
+      "by_language": {
+        "en": {
+          "cases": 2,
+          "exact_match_rate": 1.0,
+          "exact_matches": 2
+        },
+        "zh": {
+          "cases": 4,
+          "exact_match_rate": 1.0,
+          "exact_matches": 4
+        }
+      },
+      "by_split": {
+        "holdout": {
+          "cases": 6,
+          "exact_match_rate": 1.0,
+          "exact_matches": 6,
+          "successful_calls": 6
+        }
+      },
+      "cases": 6,
+      "exact_match_rate": 1.0,
+      "exact_matches": 6,
+      "failed_calls": 0,
+      "failures": [],
+      "field_accuracy": {
+        "customer_message_matches": 1.0,
+        "discounts": 1.0,
+        "item_count": 1.0,
+        "product_ids": 1.0,
+        "quantities": 1.0
+      },
+      "latency_ms": {
+        "mean": 1166.9,
+        "p50": 896.4,
+        "p95": 2016.5
+      },
+      "run": 1,
+      "successful_calls": 6,
+      "tokens": {
+        "input": 3967,
+        "output": 621,
+        "total": 4588
+      }
+    },
+    {
+      "by_language": {
+        "en": {
+          "cases": 2,
+          "exact_match_rate": 1.0,
+          "exact_matches": 2
+        },
+        "zh": {
+          "cases": 4,
+          "exact_match_rate": 1.0,
+          "exact_matches": 4
+        }
+      },
+      "by_split": {
+        "holdout": {
+          "cases": 6,
+          "exact_match_rate": 1.0,
+          "exact_matches": 6,
+          "successful_calls": 6
+        }
+      },
+      "cases": 6,
+      "exact_match_rate": 1.0,
+      "exact_matches": 6,
+      "failed_calls": 0,
+      "failures": [],
+      "field_accuracy": {
+        "customer_message_matches": 1.0,
+        "discounts": 1.0,
+        "item_count": 1.0,
+        "product_ids": 1.0,
+        "quantities": 1.0
+      },
+      "latency_ms": {
+        "mean": 1150.6,
+        "p50": 1096.5,
+        "p95": 1626.0
+      },
+      "run": 2,
+      "successful_calls": 6,
+      "tokens": {
+        "input": 3967,
+        "output": 651,
+        "total": 4618
+      }
+    }
+  ],
+  "split": "holdout"
+}

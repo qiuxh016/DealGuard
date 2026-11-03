@@ -143,6 +143,12 @@ The wrong-policy ALLOW cases are Chinese loyalty/product inquiries where retriev
 
 ## Policy RAG citation and safety evaluation
 
+### Frozen intent challenge baseline
+
+Reproduce the frozen lexical challenge with `.\backend\.venv\Scripts\python.exe scripts\evaluate_policy_rag_challenge.py` from the repository root. The dataset SHA-256 is `41e1e233abb56828ff4498c750f8901c36fb38faf5a85e12aab560ec9abeb00d`; the frozen scorer SHA-256 is `4dba168ef79c9f314b60420e7f90970a4d0761e833c0fb6c403eb71bdc0aea37`. The 14-case set reproduces 60% relevant citation coverage, 83.3% citation accuracy among cited relevant queries, 40% relevant abstention, 100% false citations on four near-topic non-policy queries, and 100% source-substring integrity. By intent, explicit mixed-language policy requests cite 5/5; related paraphrases cite 1/5 and abstain 4/5; near-topic non-policy requests cite 4/4.
+
+The detailed case IDs and intent split are in `policy-rag-challenge-intent-analysis-2026-11-03.json`. This set was written by the implementation author, so it is not an independent or blind evaluation. Do not tune the scorer from it. The next evaluation requires an independent author; the handoff rules are in `independent-policy-retrieval-challenge-author-brief.md`.
+
 `scripts/evaluate_policy_rag_safety.py` evaluates the existing 20-case bilingual retrieval_v2 set plus six frozen safety boundaries. The harness injects expired, cross-tenant, wrong-scope and reference-only decoys for each case, includes one overlapping-rule conflict, and adds two same-scope policies with identical structured authorization rules to exercise multi-candidate selection. For those two cases it uses the same product/quantity/discount prefix as the API replay. It reports candidate-filter precision, decoy leaks, conflict precision/recall, decision coverage, selective policy accuracy, correct-abstention recall, exact clause Citation Accuracy@1, source-substring integrity, language breakdown and offline latency. It does not create quotes or call the inquiry parser.
 
 The corpus in `data/policy_rag_safety/policies.json` uses versioned Markdown with headings, eligibility clauses, direct limits, approval exceptions and commercial-effect clauses. It is a fixed evaluation fixture, not customer-uploaded or live HarborLight policy text. Offline Qwen timing excludes model load and provider/runtime overhead. Reports are `policy-rag-safety-bm25-baseline.json` and `policy-rag-safety-qwen3.json`; combined dataset SHA-256 is `4f9a2964d3b10d2e4df8d8d4db17870eeb3d291b924c4dfb8118684171968a18`.

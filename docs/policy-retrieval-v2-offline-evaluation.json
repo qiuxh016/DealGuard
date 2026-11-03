@@ -1,0 +1,55 @@
+{
+  "dataset": "retrieval_v2",
+  "dataset_sha256": "8fdfa134c2a3d0fd5c52532980112e074e6c1906a569f05ce3d850ec322aaa06",
+  "methods": {
+    "bm25": {
+      "cases": 20,
+      "citation_accuracy_at_1": 0.7,
+      "failed_case_ids": [
+        "v2-loyalty-zh-dev",
+        "v2-earlypay-zh-holdout",
+        "v2-product-zh-holdout",
+        "v2-loyalty-zh-holdout",
+        "v2-earlypay-zh-dev",
+        "v2-product-zh-dev"
+      ],
+      "mrr": 0.8041666666666666,
+      "recall_at_3": 0.85
+    },
+    "deterministic_dense_test_adapter": {
+      "cases": 20,
+      "citation_accuracy_at_1": 0.6,
+      "failed_case_ids": [
+        "v2-loyalty-zh-dev",
+        "v2-earlypay-zh-holdout",
+        "v2-season-zh-dev",
+        "v2-product-zh-holdout",
+        "v2-loyalty-zh-holdout",
+        "v2-earlypay-zh-dev",
+        "v2-season-zh-holdout",
+        "v2-product-zh-dev"
+      ],
+      "mrr": 0.7283333333333333,
+      "recall_at_3": 0.8
+    },
+    "rrf": {
+      "cases": 20,
+      "citation_accuracy_at_1": 0.6,
+      "failed_case_ids": [
+        "v2-loyalty-zh-dev",
+        "v2-earlypay-zh-holdout",
+        "v2-season-zh-dev",
+        "v2-product-zh-holdout",
+        "v2-loyalty-zh-holdout",
+        "v2-earlypay-zh-dev",
+        "v2-season-zh-holdout",
+        "v2-product-zh-dev"
+      ],
+      "mrr": 0.7375,
+      "recall_at_3": 0.85
+    }
+  },
+  "offline_test_adapter_only": true,
+  "real_model_evaluation": false,
+  "split": "all"
+}

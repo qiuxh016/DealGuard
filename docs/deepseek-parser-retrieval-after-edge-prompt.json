@@ -1,0 +1,109 @@
+{
+  "base_url_host": "api.deepseek.com",
+  "cases": 50,
+  "dataset": "retrieval",
+  "dataset_sha256": "eaf82293005b209bc32ea0c8f6eceef0deed375f6d0bef6545c98faefeb6b1e7",
+  "generated_at": "2026-11-03T05:21:57.741510+00:00",
+  "model": "deepseek-flash",
+  "packages": {
+    "langchain-openai": "1.7.3",
+    "openai": "3.42.1"
+  },
+  "runs": [
+    {
+      "by_language": {
+        "en": {
+          "cases": 50,
+          "exact_match_rate": 1.0,
+          "exact_matches": 50
+        }
+      },
+      "by_split": {
+        "development": {
+          "cases": 35,
+          "exact_match_rate": 1.0,
+          "exact_matches": 35,
+          "successful_calls": 35
+        },
+        "holdout": {
+          "cases": 15,
+          "exact_match_rate": 1.0,
+          "exact_matches": 15,
+          "successful_calls": 15
+        }
+      },
+      "cases": 50,
+      "exact_match_rate": 1.0,
+      "exact_matches": 50,
+      "failed_calls": 0,
+      "failures": [],
+      "field_accuracy": {
+        "customer_message_matches": 1.0,
+        "discounts": 1.0,
+        "item_count": 1.0,
+        "product_ids": 1.0,
+        "quantities": 1.0
+      },
+      "latency_ms": {
+        "mean": 1039.2,
+        "p50": 1030.0,
+        "p95": 1260.2
+      },
+      "run": 1,
+      "successful_calls": 50,
+      "tokens": {
+        "input": 33377,
+        "output": 5483,
+        "total": 38860
+      }
+    },
+    {
+      "by_language": {
+        "en": {
+          "cases": 50,
+          "exact_match_rate": 1.0,
+          "exact_matches": 50
+        }
+      },
+      "by_split": {
+        "development": {
+          "cases": 35,
+          "exact_match_rate": 1.0,
+          "exact_matches": 35,
+          "successful_calls": 35
+        },
+        "holdout": {
+          "cases": 15,
+          "exact_match_rate": 1.0,
+          "exact_matches": 15,
+          "successful_calls": 15
+        }
+      },
+      "cases": 50,
+      "exact_match_rate": 1.0,
+      "exact_matches": 50,
+      "failed_calls": 0,
+      "failures": [],
+      "field_accuracy": {
+        "customer_message_matches": 1.0,
+        "discounts": 1.0,
+        "item_count": 1.0,
+        "product_ids": 1.0,
+        "quantities": 1.0
+      },
+      "latency_ms": {
+        "mean": 1004.5,
+        "p50": 998.3,
+        "p95": 1259.5
+      },
+      "run": 2,
+      "successful_calls": 50,
+      "tokens": {
+        "input": 33377,
+        "output": 5469,
+        "total": 38846
+      }
+    }
+  ],
+  "split": "all"
+}

@@ -2,7 +2,7 @@ from decimal import Decimal
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -33,11 +33,24 @@ class CustomerCreate(BaseModel):
 class ProductCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    id: str = Field(min_length=2, max_length=80, pattern="^[A-Za-z0-9_-]+$")
+    id: str | None = Field(default=None, min_length=2, max_length=80, pattern="^[A-Za-z0-9_-]+$")
+    sku: str | None = Field(default=None, min_length=2, max_length=80, pattern="^[A-Za-z0-9_-]+$")
     name: str = Field(min_length=2, max_length=160)
     currency: str = Field(default="USD", pattern="^[A-Z]{3}$")
     unit_price: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
     stock: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_sku(self):
+        if not self.id and not self.sku:
+            raise ValueError("A product SKU is required.")
+        if self.id and self.sku and self.id.upper() != self.sku.upper():
+            raise ValueError("id and sku must refer to the same product SKU when both are supplied.")
+        return self
+
+    @property
+    def normalized_sku(self) -> str:
+        return (self.sku or self.id or "").upper()
 
     @field_validator("name")
     @classmethod
@@ -50,7 +63,10 @@ class ProductCreate(BaseModel):
 
 @router.get("/customers")
 def list_customers(actor: DemoActor = Depends(get_current_actor), db: Session = Depends(get_db)):
-    require_capability(actor, "business_data.read", code="BUSINESS_DATA_ROLE_REQUIRED", message="This role cannot view customers.")
+    if actor.role == "manager":
+        require_capability(actor, "policy.diff", code="BUSINESS_DATA_ROLE_REQUIRED", message="This role cannot select a customer for policy comparison.")
+    else:
+        require_capability(actor, "business_data.read", code="BUSINESS_DATA_ROLE_REQUIRED", message="This role cannot view customers.")
     query = select(Customer).where(Customer.tenant_id == actor.tenant_id)
     if actor.role == "sales":
         query = query.where(Customer.id == actor.customer_id)
@@ -69,21 +85,24 @@ def create_customer(body: CustomerCreate, actor: DemoActor = Depends(get_current
 
 @router.get("/products")
 def list_products(actor: DemoActor = Depends(get_current_actor), db: Session = Depends(get_db)):
-    require_capability(actor, "business_data.read", code="BUSINESS_DATA_ROLE_REQUIRED", message="This role cannot view products.")
+    if actor.role == "manager":
+        require_capability(actor, "policy.diff", code="BUSINESS_DATA_ROLE_REQUIRED", message="This role cannot view products for policy comparison.")
+    else:
+        require_capability(actor, "business_data.read", code="BUSINESS_DATA_ROLE_REQUIRED", message="This role cannot view products.")
     rows = db.scalars(select(Product).where(Product.tenant_id == actor.tenant_id).order_by(Product.id)).all()
-    return [{"id": row.id, "name": row.name, "currency": row.currency, "unit_price": row.unit_price, "stock": row.stock} for row in rows]
+    return [{"id": row.sku, "sku": row.sku, "name": row.name, "currency": row.currency, "unit_price": row.unit_price, "stock": row.stock} for row in rows]
 
 
 @router.post("/products", status_code=201)
 def create_product(body: ProductCreate, actor: DemoActor = Depends(get_current_actor), db: Session = Depends(get_db)):
     require_capability(actor, "business_data.manage", code="BUSINESS_DATA_ADMIN_REQUIRED", message="Only workspace administrators can add products.")
-    if db.scalar(select(Product.id).where(Product.id == body.id.upper(), Product.tenant_id == actor.tenant_id)):
-        raise HTTPException(status_code=409, detail={"code": "PRODUCT_ALREADY_EXISTS", "message": "This product ID already exists in the workspace."})
-    row = Product(id=body.id.upper(), name=body.name.strip(), currency=body.currency, unit_price=body.unit_price, stock=body.stock, tenant_id=actor.tenant_id)
+    if db.scalar(select(Product.internal_id).where(Product.sku == body.normalized_sku, Product.tenant_id == actor.tenant_id)):
+        raise HTTPException(status_code=409, detail={"code": "PRODUCT_ALREADY_EXISTS", "message": "This product SKU already exists in the workspace."})
+    row = Product(sku=body.normalized_sku, name=body.name.strip(), currency=body.currency, unit_price=body.unit_price, stock=body.stock, tenant_id=actor.tenant_id)
     db.add(row)
     try:
         db.commit()
     except IntegrityError as error:
         db.rollback()
         raise HTTPException(status_code=409, detail={"code": "PRODUCT_ALREADY_EXISTS", "message": "This product ID already exists."}) from error
-    return {"id": row.id, "name": row.name, "currency": row.currency, "unit_price": row.unit_price, "stock": row.stock}
+    return {"id": row.sku, "sku": row.sku, "name": row.name, "currency": row.currency, "unit_price": row.unit_price, "stock": row.stock}

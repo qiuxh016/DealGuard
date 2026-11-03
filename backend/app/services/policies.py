@@ -53,15 +53,17 @@ def current_quote_policies(
     return [row for row in db.scalars(query).all() if is_policy_effective(row, instant)]
 
 
-def activate_policy(db: Session, actor: DemoActor, policy_row_id: str) -> PolicyResponse:
+def activate_policy(db: Session, actor: DemoActor, policy_row_id: str, *, commit: bool = True) -> PolicyResponse:
     if not has_capability(actor, "policies.activate"):
         add_policy_audit_event(db, actor, "policy_activation_attempt", "DENIED", "ADMIN_REQUIRED")
-        db.commit()
+        if commit:
+            db.commit()
         raise HTTPException(status_code=403, detail={"code": "ADMIN_REQUIRED", "message": "Only workspace administrators can activate a policy."})
     selected = db.scalar(select(Policy).where(Policy.id == policy_row_id, Policy.tenant_id == actor.tenant_id))
     if selected is None:
         add_policy_audit_event(db, actor, "policy_activation_attempt", "DENIED", "POLICY_NOT_FOUND")
-        db.commit()
+        if commit:
+            db.commit()
         raise HTTPException(status_code=404, detail={"code": "POLICY_NOT_FOUND", "message": "Policy version not found."})
     if selected.policy_scope == "product_specific" and db.scalar(select(Product.id).where(
         Product.id == selected.scope_product_id, Product.tenant_id == actor.tenant_id,
@@ -78,8 +80,9 @@ def activate_policy(db: Session, actor: DemoActor, policy_row_id: str) -> Policy
     for version in versions:
         version.status = "active" if version.id == selected.id else "inactive"
     add_policy_audit_event(db, actor, "policy_activated", "SUCCESS", policy_id=selected.policy_id, version=selected.version)
-    db.commit()
-    db.refresh(selected)
+    if commit:
+        db.commit()
+        db.refresh(selected)
     return PolicyResponse(
         id=selected.id, policy_id=selected.policy_id, version=selected.version,
         title=selected.title, action_type=selected.action_type, status=selected.status,

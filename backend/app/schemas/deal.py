@@ -232,10 +232,17 @@ class PolicyDraftResponse(BaseModel):
 
 class PolicyDiffRequest(BaseModel):
     inquiry: str = Field(min_length=1, max_length=10_000)
+    customer_id: str | None = Field(default=None, min_length=1, max_length=80)
     base_policy_id: str
     base_version: str
     compare_policy_id: str
     compare_version: str
+
+
+class PolicyDiffLine(BaseModel):
+    product_id: str
+    decision: GuardDecision
+    breakdown: QuoteBreakdown | None = None
 
 
 class PolicyDiffSide(BaseModel):
@@ -245,6 +252,7 @@ class PolicyDiffSide(BaseModel):
     citation: str
     decision: GuardDecision
     breakdown: QuoteBreakdown | None = None
+    lines: list[PolicyDiffLine] = Field(default_factory=list)
 
 
 class PolicyDiffResponse(BaseModel):

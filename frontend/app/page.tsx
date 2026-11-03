@@ -15,6 +15,7 @@ type Approval = { id: string; run_id: string; applicant_actor_id: string; custom
 type WorkspaceMember = { actor_id: string; display_name: string; email: string | null; role: string; customer_id: string | null; is_active: boolean };
 type WorkspaceInvitation = { id: string; email: string; role: string; customer_id: string | null; expires_at: string; expired: boolean };
 type PolicyDraft = { id: string; policy_id: string; version: string; title: string; source: string; action_type: "quote_discount" | "reference_only" | null; policy_scope: PolicyScope; scope_product_id: string | null; customer_tier: "VIP" | "Standard"; max_discount_pct: string | null; review_max_discount_pct: string | null; exception_approval_allowed: boolean; status: string };
+type PolicyDiffSide = { version: string; decision: { decision: string; reason_code: string }; breakdown?: { total: string } | null; lines?: { product_id: string; decision: { decision: string; reason_code: string }; breakdown?: { total: string } | null }[] };
 type RunResult = {
   run_id: string; status: "completed" | "needs_input" | "failed"; execution_mode: "llm" | "demo";
   intent?: { product_id?: string | null; quantity?: number | null; requested_discount_pct?: string | null; policy_scope?: PolicyScope | null; items?: { product_id: string; quantity: number; requested_discount_pct: string }[] } | null;
@@ -107,7 +108,7 @@ export default function HomePage() {
   const [exceptionEnabled, setExceptionEnabled] = useState(true);
   const [diffBase, setDiffBase] = useState("");
   const [diffCompare, setDiffCompare] = useState("");
-  const [diffResult, setDiffResult] = useState<{ base: { version: string; decision: { decision: string; reason_code: string }; breakdown?: { total: string } | null }; compare: { version: string; decision: { decision: string; reason_code: string }; breakdown?: { total: string } | null } } | null>(null);
+  const [diffResult, setDiffResult] = useState<{ base: PolicyDiffSide; compare: PolicyDiffSide } | null>(null);
   const [metrics, setMetrics] = useState<{ run_count: number; allow_count: number; review_count: number; deny_count: number; avg_duration_ms: number | null; p50_duration_ms: number | null; p95_duration_ms: number | null; demo_run_count: number; llm_run_count: number; input_tokens: number | null; output_tokens: number | null } | null>(null);
   const runKeyRef = useRef<{ actor: Actor; inquiry: string; key: string } | null>(null);
   const activePolicy = useMemo(() => policies.find((policy) => policy.status === "active"), [policies]);
@@ -323,7 +324,7 @@ export default function HomePage() {
   async function comparePolicies() {
     setBusy(true); setDiffResult(null);
     try {
-      setDiffResult(await apiRequest("/api/v1/policy-diffs", actor, { method: "POST", body: JSON.stringify({ inquiry, base_policy_id: diffBase.split("@")[0], base_version: diffBase.split("@")[1], compare_policy_id: diffCompare.split("@")[0], compare_version: diffCompare.split("@")[1] }) }));
+      setDiffResult(await apiRequest("/api/v1/policy-diffs", actor, { method: "POST", body: JSON.stringify({ inquiry, customer_id: selectedCustomerId, base_policy_id: diffBase.split("@")[0], base_version: diffBase.split("@")[1], compare_policy_id: diffCompare.split("@")[0], compare_version: diffCompare.split("@")[1] }) }));
     } catch (error) { setNotice(error instanceof Error ? error.message : "版本对比失败"); }
     finally { setBusy(false); }
   }
@@ -471,10 +472,10 @@ export default function HomePage() {
                 <div className="dg-draft-actions"><button onClick={() => void savePolicyDraft(false)} disabled={busy || policyDraft.status === "active"} className="dg-button dg-button-small dg-button-secondary">保存规则</button><button onClick={() => void savePolicyDraft(true)} disabled={busy || policyDraft.status === "active"} className="dg-button dg-button-small">保存并激活</button></div>
               </div>}
 
-              <div className="dg-divider"><h3 className="dg-block-title">策略版本 Diff</h3><p className="dg-diff-copy">使用左侧同一询盘与可信业务数据，只比较 Guard 结果，不创建报价。</p>
+              <div className="dg-divider"><h3 className="dg-block-title">策略版本 Diff</h3><p className="dg-diff-copy">使用当前选定客户和询盘，逐项比较 Guard 结果，不创建报价。</p>
                 <div className="dg-diff-controls">{[diffBase, diffCompare].map((value, index) => <select key={index} aria-label={index === 0 ? "基准政策" : "对比政策"} value={value} onChange={(event) => index === 0 ? setDiffBase(event.target.value) : setDiffCompare(event.target.value)} className="dg-control"><option value="">选择版本</option>{policies.map((policy) => <option key={policy.id} value={`${policy.policy_id}@${policy.version}`}>{policy.policy_id}@{policy.version}</option>)}</select>)}</div>
                 <button onClick={comparePolicies} disabled={busy || !diffBase || !diffCompare} className="dg-button dg-button-small dg-button-secondary" style={{ width: "100%", marginTop: 8 }}>比较当前询盘</button>
-                {diffResult && <div className="dg-diff-result">{[diffResult.base, diffResult.compare].map((side) => <div key={side.version} className="dg-diff-side"><strong>{side.version}: {side.decision.decision}</strong><p>{side.decision.reason_code}</p>{side.breakdown && <p>${Number(side.breakdown.total).toLocaleString()}</p>}</div>)}</div>}
+                {diffResult && <div className="dg-diff-result">{[diffResult.base, diffResult.compare].map((side) => <div key={side.version} className="dg-diff-side"><strong>{side.version}: {side.decision.decision}</strong><p>{side.decision.reason_code}</p>{side.breakdown && <p>${Number(side.breakdown.total).toLocaleString()}</p>}{side.lines?.map((line) => <p key={line.product_id}>{line.product_id}: {line.decision.decision} · {line.decision.reason_code}{line.breakdown ? ` · $${Number(line.breakdown.total).toLocaleString()}` : ""}</p>)}</div>)}</div>}
               </div>
             </section>
 

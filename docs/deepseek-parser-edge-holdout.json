@@ -1,0 +1,185 @@
+{
+  "base_url_host": "api.deepseek.com",
+  "cases": 6,
+  "dataset": "edge",
+  "dataset_sha256": "cf4d8c336e84ebd390e876a92bf580f544e08270f1ff6a1d4156d853344f4665",
+  "generated_at": "2026-11-03T05:20:57.165590+00:00",
+  "model": "deepseek-flash",
+  "packages": {
+    "langchain-openai": "1.7.3",
+    "openai": "3.42.1"
+  },
+  "runs": [
+    {
+      "by_language": {
+        "en": {
+          "cases": 2,
+          "exact_match_rate": 1.0,
+          "exact_matches": 2
+        },
+        "zh": {
+          "cases": 4,
+          "exact_match_rate": 0.75,
+          "exact_matches": 3
+        }
+      },
+      "by_split": {
+        "holdout": {
+          "cases": 6,
+          "exact_match_rate": 0.8333333333333334,
+          "exact_matches": 5,
+          "successful_calls": 6
+        }
+      },
+      "cases": 6,
+      "exact_match_rate": 0.8333333333333334,
+      "exact_matches": 5,
+      "failed_calls": 0,
+      "failures": [
+        {
+          "actual": {
+            "customer_message_matches": true,
+            "item_count": 1,
+            "items": [
+              {
+                "product_id": null,
+                "quantity": null,
+                "requested_discount_pct": null
+              }
+            ]
+          },
+          "case_id": "zh-missing-discount",
+          "expected": {
+            "customer_message_matches": true,
+            "item_count": 1,
+            "items": [
+              {
+                "product_id": "P-100",
+                "quantity": 80,
+                "requested_discount_pct": null
+              }
+            ]
+          },
+          "field_matches": {
+            "customer_message_matches": true,
+            "discounts": true,
+            "item_count": true,
+            "product_ids": false,
+            "quantities": false
+          },
+          "input_tokens": 662,
+          "language": "zh",
+          "latency_ms": 651.1,
+          "output_tokens": 89,
+          "split": "holdout",
+          "status": "success"
+        }
+      ],
+      "field_accuracy": {
+        "customer_message_matches": 1.0,
+        "discounts": 1.0,
+        "item_count": 1.0,
+        "product_ids": 0.8333333333333334,
+        "quantities": 0.8333333333333334
+      },
+      "latency_ms": {
+        "mean": 1143.0,
+        "p50": 957.8,
+        "p95": 2013.4
+      },
+      "run": 1,
+      "successful_calls": 6,
+      "tokens": {
+        "input": 3976,
+        "output": 641,
+        "total": 4617
+      }
+    },
+    {
+      "by_language": {
+        "en": {
+          "cases": 2,
+          "exact_match_rate": 1.0,
+          "exact_matches": 2
+        },
+        "zh": {
+          "cases": 4,
+          "exact_match_rate": 0.75,
+          "exact_matches": 3
+        }
+      },
+      "by_split": {
+        "holdout": {
+          "cases": 6,
+          "exact_match_rate": 0.8333333333333334,
+          "exact_matches": 5,
+          "successful_calls": 6
+        }
+      },
+      "cases": 6,
+      "exact_match_rate": 0.8333333333333334,
+      "exact_matches": 5,
+      "failed_calls": 0,
+      "failures": [
+        {
+          "actual": {
+            "customer_message_matches": true,
+            "item_count": 1,
+            "items": [
+              {
+                "product_id": null,
+                "quantity": null,
+                "requested_discount_pct": null
+              }
+            ]
+          },
+          "case_id": "zh-zero-quantity",
+          "expected": {
+            "customer_message_matches": true,
+            "item_count": 1,
+            "items": [
+              {
+                "product_id": "P-100",
+                "quantity": null,
+                "requested_discount_pct": "5"
+              }
+            ]
+          },
+          "field_matches": {
+            "customer_message_matches": true,
+            "discounts": false,
+            "item_count": true,
+            "product_ids": false,
+            "quantities": true
+          },
+          "input_tokens": 662,
+          "language": "zh",
+          "latency_ms": 1245.0,
+          "output_tokens": 65,
+          "split": "holdout",
+          "status": "success"
+        }
+      ],
+      "field_accuracy": {
+        "customer_message_matches": 1.0,
+        "discounts": 0.8333333333333334,
+        "item_count": 1.0,
+        "product_ids": 0.8333333333333334,
+        "quantities": 1.0
+      },
+      "latency_ms": {
+        "mean": 915.4,
+        "p50": 882.7,
+        "p95": 1245.0
+      },
+      "run": 2,
+      "successful_calls": 6,
+      "tokens": {
+        "input": 3976,
+        "output": 616,
+        "total": 4592
+      }
+    }
+  ],
+  "split": "holdout"
+}

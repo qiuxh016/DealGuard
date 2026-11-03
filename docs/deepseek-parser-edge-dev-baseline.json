@@ -1,0 +1,127 @@
+{
+  "base_url_host": "api.deepseek.com",
+  "cases": 14,
+  "dataset": "edge",
+  "dataset_sha256": "cf4d8c336e84ebd390e876a92bf580f544e08270f1ff6a1d4156d853344f4665",
+  "generated_at": "2026-11-03T05:17:58.228145+00:00",
+  "model": "deepseek-flash",
+  "packages": {
+    "langchain-openai": "1.7.3",
+    "openai": "3.42.1"
+  },
+  "runs": [
+    {
+      "by_language": {
+        "en": {
+          "cases": 9,
+          "exact_match_rate": 0.8888888888888888,
+          "exact_matches": 8
+        },
+        "zh": {
+          "cases": 2,
+          "exact_match_rate": 1.0,
+          "exact_matches": 2
+        }
+      },
+      "by_split": {
+        "development": {
+          "cases": 14,
+          "exact_match_rate": 0.7142857142857143,
+          "exact_matches": 10,
+          "successful_calls": 11
+        }
+      },
+      "cases": 14,
+      "exact_match_rate": 0.7142857142857143,
+      "exact_matches": 10,
+      "failed_calls": 3,
+      "failures": [
+        {
+          "actual": {
+            "customer_message_matches": true,
+            "item_count": 1,
+            "items": [
+              {
+                "product_id": "P-100",
+                "quantity": 100,
+                "requested_discount_pct": "0"
+              }
+            ]
+          },
+          "case_id": "en-missing-discount",
+          "expected": {
+            "customer_message_matches": true,
+            "item_count": 1,
+            "items": [
+              {
+                "product_id": "P-100",
+                "quantity": 100,
+                "requested_discount_pct": null
+              }
+            ]
+          },
+          "field_matches": {
+            "customer_message_matches": true,
+            "discounts": false,
+            "item_count": true,
+            "product_ids": true,
+            "quantities": true
+          },
+          "input_tokens": 574,
+          "language": "en",
+          "latency_ms": 846.7,
+          "output_tokens": 83,
+          "split": "development",
+          "status": "success"
+        },
+        {
+          "case_id": "en-zero-quantity",
+          "error_type": "ValidationError",
+          "language": "en",
+          "latency_ms": 1053.9,
+          "split": "development",
+          "status": "error",
+          "status_code": null
+        },
+        {
+          "case_id": "en-over-limit-discount",
+          "error_type": "ValidationError",
+          "language": "en",
+          "latency_ms": 875.2,
+          "split": "development",
+          "status": "error",
+          "status_code": null
+        },
+        {
+          "case_id": "en-negative-quantity",
+          "error_type": "ValidationError",
+          "language": "en",
+          "latency_ms": 1070.6,
+          "split": "development",
+          "status": "error",
+          "status_code": null
+        }
+      ],
+      "field_accuracy": {
+        "customer_message_matches": 1.0,
+        "discounts": 0.9090909090909091,
+        "item_count": 1.0,
+        "product_ids": 1.0,
+        "quantities": 1.0
+      },
+      "latency_ms": {
+        "mean": 1126.3,
+        "p50": 974.0,
+        "p95": 2421.7
+      },
+      "run": 1,
+      "successful_calls": 11,
+      "tokens": {
+        "input": 6383,
+        "output": 1013,
+        "total": 7396
+      }
+    }
+  ],
+  "split": "development"
+}
