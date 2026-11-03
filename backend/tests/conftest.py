@@ -25,7 +25,7 @@ def client(tmp_path):
             db.close()
 
     app.dependency_overrides[get_db] = override_db
-    with TestClient(app) as test_client:
+    with TestClient(app, headers={"X-Demo-Actor": "sales_a"}) as test_client:
         test_client.app.state.session_factory = TestingSession
         yield test_client
     app.dependency_overrides.clear()

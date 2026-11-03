@@ -4,13 +4,11 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import "../history.css";
 
-type Actor = "sales_a" | "sales_b" | "admin" | "manager";
 type AuditEvent = { id: string; actor_id: string; action: string; outcome: string; reason_code: string | null; policy_id: string | null; version: string | null; created_at: string };
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
-const DEMO_MODE = process.env.NODE_ENV !== "production";
 
 export default function AuditPage() {
-  const [actor, setActor] = useState<Actor>("admin");
+  const [actor, setActor] = useState("");
   const [rows, setRows] = useState<AuditEvent[]>([]);
   const [action, setAction] = useState("");
   const [outcome, setOutcome] = useState("");
@@ -20,7 +18,7 @@ export default function AuditPage() {
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const headers = useCallback((): Record<string, string> => DEMO_MODE ? { "X-Demo-Actor": actor } : {}, [actor]);
+  const headers = useCallback((): Record<string, string> => ({}), []);
   const loadAudit = useCallback(async (event?: FormEvent) => {
     event?.preventDefault(); setBusy(true); setNotice("");
     const params = new URLSearchParams();
@@ -39,12 +37,13 @@ export default function AuditPage() {
   }, [action, createdFrom, createdTo, headers, outcome, policyId]);
 
   useEffect(() => {
-    if (!DEMO_MODE) void fetch(`${API}/api/v1/auth/me`, { credentials: "include", cache: "no-store" }).then(async (response) => {
+    void fetch(`${API}/api/v1/auth/me`, { credentials: "include", cache: "no-store" }).then(async (response) => {
       if (!response.ok) throw new Error("请先登录后查看审计记录");
-      const user = await response.json(); setActor(user.actor_id as Actor);
+      const user = await response.json(); setActor(user.actor_id);
     }).catch((error) => setNotice(error instanceof Error ? error.message : "登录状态无效"));
   }, []);
   useEffect(() => {
+    if (!actor) return;
     void fetch(`${API}/api/v1/audit`, { headers: headers(), credentials: "include", cache: "no-store" }).then(async (response) => {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload?.detail?.message ?? "无法读取审计记录");
@@ -54,7 +53,6 @@ export default function AuditPage() {
 
   return <main className="dg-history"><div className="dg-history-main">
     <header className="dg-history-head"><div><h1>政策管理审计</h1><p>记录政策草稿上传、规则编辑、激活及拒绝事件，不展示政策正文。</p></div><nav className="dg-history-nav"><Link href="/">工作台</Link><Link href="/runs">运行记录</Link><Link href="/evaluation">检索评测</Link></nav></header>
-    {DEMO_MODE && <label>演示身份 <select className="dg-history-actor" value={actor} onChange={(event) => { setRows([]); setNotice(""); setActor(event.target.value as Actor); }}><option value="admin">Demo Admin</option><option value="manager">Demo Manager</option><option value="sales_a">Sales A</option><option value="sales_b">Sales B</option></select></label>}
     <section className="dg-history-panel" style={{ marginTop: 12 }}>
       <form className="dg-history-filters" onSubmit={(event) => void loadAudit(event)}>
         <label>动作<input placeholder="全部动作" value={action} onChange={(event) => setAction(event.target.value)} /></label>

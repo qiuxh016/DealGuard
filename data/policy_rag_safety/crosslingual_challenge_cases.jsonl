@@ -1,0 +1,14 @@
+{"case_id":"challenge-cite-bulk-mixed","query":"这批 bulk/wholesale shipment 是否适用 quantity discount？","target_policy_id":"EVAL-BULK","policy_relevant":true,"expected":"cite","expected_citation_index":0}
+{"case_id":"challenge-cite-earlypay-mixed","query":"客户准备 prepay 发票 within seven days，能否享受 early payment concession?","target_policy_id":"EVAL-EARLYPAY","policy_relevant":true,"expected":"cite","expected_citation_index":0}
+{"case_id":"challenge-cite-product-mixed","query":"P-100 fits the designated series and product category; is the promotion applicable?","target_policy_id":"EVAL-PRODUCT","policy_relevant":true,"expected":"cite","expected_citation_index":0}
+{"case_id":"challenge-cite-loyalty-mixed","query":"Returning VIP client from a long-standing relationship asks for a loyalty rebate.","target_policy_id":"EVAL-LOYALTY","policy_relevant":true,"expected":"cite","expected_citation_index":0}
+{"case_id":"challenge-cite-season-mixed","query":"已批准 holiday campaign，请问 seasonal discount for VIP customer?","target_policy_id":"EVAL-SEASON","policy_relevant":true,"expected":"cite","expected_citation_index":0}
+{"case_id":"challenge-abstain-bulk-synonym","query":"整柜团购可有大单优惠？","target_policy_id":"EVAL-BULK","policy_relevant":true,"expected":"abstain"}
+{"case_id":"challenge-abstain-earlypay-synonym","query":"款项到账五天内结清，可否减免一部分费用？","target_policy_id":"EVAL-EARLYPAY","policy_relevant":true,"expected":"abstain"}
+{"case_id":"challenge-abstain-product-synonym","query":"P-100 是否在推广名单内？我还想看商品参数。","target_policy_id":"EVAL-PRODUCT","policy_relevant":true,"expected":"abstain"}
+{"case_id":"challenge-abstain-loyalty-synonym","query":"老伙伴再次下单有没有客户忠诚返利？","target_policy_id":"EVAL-LOYALTY","policy_relevant":true,"expected":"abstain"}
+{"case_id":"challenge-abstain-season-synonym","query":"夏季活动期间仓库到货安排是什么？","target_policy_id":"EVAL-SEASON","policy_relevant":true,"expected":"abstain"}
+{"case_id":"challenge-abstain-bulk-near-topic","query":"请问批量订单从哪个港口发货？","target_policy_id":"EVAL-BULK","policy_relevant":false,"expected":"abstain"}
+{"case_id":"challenge-abstain-earlypay-near-topic","query":"VIP 客户提前付款后，款项大概多久到账？","target_policy_id":"EVAL-EARLYPAY","policy_relevant":false,"expected":"abstain"}
+{"case_id":"challenge-abstain-product-near-topic","query":"Can you send the Product A installation manual and warranty schedule?","target_policy_id":"EVAL-PRODUCT","policy_relevant":false,"expected":"abstain"}
+{"case_id":"challenge-abstain-season-near-topic","query":"What are the warehouse hours during the holiday campaign?","target_policy_id":"EVAL-SEASON","policy_relevant":false,"expected":"abstain"}

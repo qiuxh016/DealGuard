@@ -8,8 +8,6 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     llm_base_url: str = ""
     llm_model: str = ""
-    embedding_model: str = ""
-    local_embedding_model_path: str = ""
     auth_login_max_attempts: int = 5
     auth_login_window_seconds: int = 300
 

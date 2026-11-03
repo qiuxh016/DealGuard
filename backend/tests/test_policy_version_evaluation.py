@@ -41,7 +41,9 @@ def test_policy_version_case_uses_active_source_and_guard(client, case):
 
     stored = client.get("/api/v1/policies").json()
     source = next(row["source"] for row in stored if row["version"] == case["active_version"])
-    assert evidence["citation"] == source
+    assert evidence["citation"] in source
+    assert evidence["citation_ref"].startswith(f"DISCOUNT-01@{case['active_version']}#L")
+    assert evidence["line_start"] >= 1 and evidence["line_end"] >= evidence["line_start"]
 
     with client.app.state.session_factory() as db:
         quote_count = db.scalar(select(func.count()).select_from(QuoteDraft))

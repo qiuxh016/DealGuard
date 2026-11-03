@@ -8,7 +8,8 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.db.models import ApprovalRequest, Customer, DemoActor, Policy, Product, QuoteDraft, RunRecord
-from app.guards.business_rules import calculate_breakdown, evaluate_quote
+from app.guards.business_rules import calculate_breakdown, evaluate_quote_with_trace
+from app.rag.provenance import policy_source_hash, quote_provenance
 from app.schemas.deal import ActionProposal, ApprovalOutcome, ApprovalRequestResponse, QuoteBreakdown, TraceEvent
 from app.services.quotes import quote_response
 from app.services.permissions import has_capability
@@ -16,7 +17,7 @@ from app.services.permissions import has_capability
 
 def _manager(actor: DemoActor) -> None:
     if not has_capability(actor, "approvals.decide"):
-        raise HTTPException(status_code=403, detail={"code": "MANAGER_REQUIRED", "message": "Only the demo manager can process approvals."})
+        raise HTTPException(status_code=403, detail={"code": "MANAGER_REQUIRED", "message": "Only workspace managers can process approvals."})
 
 
 def _trace(db: Session, row: ApprovalRequest, status: str, message: str, code: str) -> list[TraceEvent]:
@@ -117,14 +118,17 @@ def process_approval(db: Session, actor: DemoActor, approval_id: str, approve: b
                 stale_code = "APPROVAL_CONTEXT_CHANGED"
             elif current is None or current.version != saved["policy_version"]:
                 stale_code = "POLICY_CHANGED"
+            elif saved.get("policy_provenance", {}).get("policy_source_hash") and saved["policy_provenance"]["policy_source_hash"] != policy_source_hash(current):
+                stale_code = "POLICY_SOURCE_CHANGED"
             else:
                 proposal = ActionProposal(**proposal_data)
-                decision, breakdown = evaluate_quote(applicant, customer, product, current, proposal, row.policy_scope)
+                decision, breakdown, guard_checks = evaluate_quote_with_trace(applicant, customer, product, current, proposal, row.policy_scope)
                 if decision.decision not in {"ALLOW", "REVIEW"}:
                     stale_code = decision.reason_code
                 elif breakdown is None:
                     breakdown = calculate_breakdown(product, proposal.quantity, proposal.requested_discount_pct)
-                current_lines.append({"product_id": product.id, "product_name": product.name, "currency": product.currency, "quantity": proposal.quantity, "unit_price": str(product.unit_price), "discount_pct": str(proposal.requested_discount_pct), "subtotal": str(breakdown.subtotal), "discount_amount": str(breakdown.discount_amount), "total": str(breakdown.total), "policy_id": current.policy_id, "policy_version": current.version, "policy_source": current.source, "policy_scope": current.policy_scope, "available_stock": product.stock, "inventory_checked_at": now.isoformat()})
+                provenance = quote_provenance(current, decision, guard_checks, saved.get("policy_provenance", {}).get("citation"), saved.get("policy_provenance", {}).get("citation_ref"), saved.get("policy_provenance", {}).get("chunk_id"))
+                current_lines.append({"product_id": product.id, "product_name": product.name, "currency": product.currency, "quantity": proposal.quantity, "unit_price": str(product.unit_price), "discount_pct": str(proposal.requested_discount_pct), "subtotal": str(breakdown.subtotal), "discount_amount": str(breakdown.discount_amount), "total": str(breakdown.total), "policy_id": current.policy_id, "policy_version": current.version, "policy_source": current.source, "policy_scope": current.policy_scope, "available_stock": product.stock, "inventory_checked_at": now.isoformat(), **provenance})
         if stale_code:
             if not _transition_pending(db, row, "STALE", actor.id, stale_code):
                 return _approval_conflict(db, approval_id, approve)
@@ -153,7 +157,7 @@ def process_approval(db: Session, actor: DemoActor, approval_id: str, approve: b
         stale_code = "POLICY_CHANGED"
     else:
         proposal = ActionProposal(customer_id=row.customer_id, product_id=row.product_id, quantity=row.quantity, requested_discount_pct=row.discount_pct)
-        decision, breakdown = evaluate_quote(applicant, customer, product, current, proposal, row.policy_scope)
+        decision, breakdown, guard_checks = evaluate_quote_with_trace(applicant, customer, product, current, proposal, row.policy_scope)
         if decision.decision not in {"ALLOW", "REVIEW"}:
             stale_code = decision.reason_code
         elif breakdown is None:
@@ -169,13 +173,14 @@ def process_approval(db: Session, actor: DemoActor, approval_id: str, approve: b
 
     if not _transition_pending(db, row, "APPROVED", actor.id):
         return _approval_conflict(db, approval_id, approve)
+    line = {"product_id": product.id, "product_name": product.name, "currency": product.currency, "quantity": row.quantity, "unit_price": str(product.unit_price), "discount_pct": str(row.discount_pct), "subtotal": str(breakdown.subtotal), "discount_amount": str(breakdown.discount_amount), "total": str(breakdown.total), "policy_id": current.policy_id, "policy_version": current.version, "policy_source": current.source, "policy_scope": row.policy_scope, "available_stock": product.stock, "inventory_checked_at": now.isoformat(), **quote_provenance(current, decision, guard_checks, None, None, None)}
     quote = QuoteDraft(
         tenant_id=actor.tenant_id,
         owner_actor_id=applicant.id, customer_id=customer.id, product_id=product.id,
         quantity=row.quantity, unit_price=product.unit_price, discount_pct=row.discount_pct,
         subtotal=breakdown.subtotal, discount_amount=breakdown.discount_amount, total=breakdown.total,
         policy_id=current.policy_id, policy_version=current.version, status="DRAFT",
-        policy_scope=row.policy_scope,
+        policy_scope=row.policy_scope, lines=[line],
     )
     db.add(quote)
     db.flush()

@@ -1,0 +1,10 @@
+{"case_id":"bilingual-holdout-bulk-a","query":"经销商想按批量订单的数量申请折扣，能否提供量价优惠？","expected_policy_id":"EVAL-BULK","expected_citation_index":0}
+{"case_id":"bilingual-holdout-bulk-b","query":"这批货物属于大宗采购，想询问批发优惠怎么计算。","expected_policy_id":"EVAL-BULK","expected_citation_index":0}
+{"case_id":"bilingual-holdout-earlypay-a","query":"如果我们提前付款，是否适用现金折让？","expected_policy_id":"EVAL-EARLYPAY","expected_citation_index":0}
+{"case_id":"bilingual-holdout-earlypay-b","query":"发票寄到后六天结清，是否有提前付款优惠？","expected_policy_id":"EVAL-EARLYPAY","expected_citation_index":0}
+{"case_id":"bilingual-holdout-product-a","query":"请确认 P-100 是否属于指定系列，可否享受该类别折扣？","expected_policy_id":"EVAL-PRODUCT","expected_citation_index":0}
+{"case_id":"bilingual-holdout-product-b","query":"这款商品是否在符合促销资格的产品类别内？","expected_policy_id":"EVAL-PRODUCT","expected_citation_index":0}
+{"case_id":"bilingual-holdout-loyalty-a","query":"长期合作的 VIP 客户再次购买，是否可以申请会员回馈？","expected_policy_id":"EVAL-LOYALTY","expected_citation_index":0}
+{"case_id":"bilingual-holdout-loyalty-b","query":"我们是回头客，这次续购能否享受老客户优惠？","expected_policy_id":"EVAL-LOYALTY","expected_citation_index":0}
+{"case_id":"bilingual-holdout-season-a","query":"年末活动期间 VIP 订单可以使用活动价吗？","expected_policy_id":"EVAL-SEASON","expected_citation_index":0}
+{"case_id":"bilingual-holdout-season-b","query":"节日促销期间能否申请季节优惠报价？","expected_policy_id":"EVAL-SEASON","expected_citation_index":0}

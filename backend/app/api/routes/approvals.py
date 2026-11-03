@@ -12,7 +12,7 @@ router = APIRouter(prefix="/approvals", tags=["approvals"])
 
 @router.get("", response_model=list[ApprovalRequestResponse])
 def get_approvals(actor: DemoActor = Depends(get_current_actor), db: Session = Depends(get_db)):
-    require_capability(actor, "approvals.read", code="MANAGER_REQUIRED", message="Only the demo manager can view pending approvals.")
+    require_capability(actor, "approvals.read", code="MANAGER_REQUIRED", message="Only workspace managers can view pending approvals.")
     return list_pending(db, actor.tenant_id)
 
 @router.post("/{approval_id}/approve", response_model=ApprovalOutcome)

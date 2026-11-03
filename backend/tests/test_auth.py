@@ -1,5 +1,6 @@
 from app.core.config import settings
 from datetime import datetime, timedelta, timezone
+from sqlalchemy import select
 
 from app.db.models import AuthAccount, AuthSession, Policy, Tenant
 from app.services.actors import hash_password
@@ -20,6 +21,43 @@ def test_login_cookie_session_and_logout(client, monkeypatch):
     assert client.post("/api/v1/policies/not-a-policy/activate", headers={"X-Demo-Actor": "admin"}).status_code == 403
     assert client.post("/api/v1/auth/logout").status_code == 200
     assert client.get("/api/v1/auth/me").status_code == 401
+
+
+def test_registration_creates_isolated_workspace_admin_and_session(client):
+    response = client.post("/api/v1/auth/register", json={
+        "organization_name": "Northwind Trading", "display_name": "Alex Morgan",
+        "email": "Alex@Northwind.example", "password": "a-secure-password-123",
+    })
+    assert response.status_code == 201, response.text
+    actor = response.json()
+    assert actor["display_name"] == "Alex Morgan"
+    assert actor["role"] == "admin"
+    assert actor["tenant_id"] != "harborlight-demo"
+    assert "httponly" in response.headers["set-cookie"].lower()
+    assert client.get("/api/v1/auth/me").json()["actor_id"] == actor["actor_id"]
+    with client.app.state.session_factory() as db:
+        account = db.get(AuthAccount, actor["actor_id"])
+        assert account.email == "alex@northwind.example"
+        assert account.password_hash != "a-secure-password-123"
+        assert db.get(Tenant, actor["tenant_id"]).name == "Northwind Trading"
+        assert db.scalar(select(Policy).where(Policy.tenant_id == actor["tenant_id"])) is None
+
+
+def test_registration_rejects_duplicate_email_and_client_role(client):
+    body = {"organization_name": "Northwind", "display_name": "Alex Morgan", "email": "alex@example.com", "password": "a-secure-password-123"}
+    assert client.post("/api/v1/auth/register", json=body).status_code == 201
+    duplicate = client.post("/api/v1/auth/register", json={**body, "email": "ALEX@example.com"})
+    assert duplicate.status_code == 409
+    role_override = client.post("/api/v1/auth/register", json={**body, "email": "new@example.com", "role": "admin"})
+    assert role_override.status_code == 422
+
+
+def test_registration_requires_strong_password(client):
+    response = client.post("/api/v1/auth/register", json={
+        "organization_name": "Northwind", "display_name": "Alex Morgan",
+        "email": "alex@example.com", "password": "short",
+    })
+    assert response.status_code == 422
 
 
 def test_expired_or_disabled_account_session_is_rejected(client):

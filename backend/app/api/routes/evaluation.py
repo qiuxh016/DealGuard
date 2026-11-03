@@ -20,7 +20,7 @@ def get_evaluation_report(
     split: Literal["all", "development", "holdout"] = Query(default="all"),
     actor: DemoActor = Depends(get_current_actor),
 ):
-    require_capability(actor, "evaluation.read", code="EVALUATION_ROLE_REQUIRED", message="Only the demo manager or admin can view evaluation reports.")
+    require_capability(actor, "evaluation.read", code="EVALUATION_ROLE_REQUIRED", message="Only workspace managers or administrators can view evaluation reports.")
     cases_path = DATA_DIR / ("cases_v2.jsonl" if dataset == "retrieval_v2" else "cases.jsonl")
     policies_path = DATA_DIR / "policies.json"
     if not cases_path.is_file() or not policies_path.is_file():

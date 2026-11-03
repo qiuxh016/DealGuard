@@ -10,6 +10,7 @@ PolicyScope = Literal["general", "bulk_order", "loyalty", "early_payment", "seas
 
 class InquiryRequest(BaseModel):
     inquiry: str = Field(min_length=1, max_length=10_000)
+    customer_id: str | None = Field(default=None, min_length=1, max_length=80)
 
 
 class InquiryIntent(BaseModel):
@@ -43,6 +44,12 @@ class QuoteLineResponse(BaseModel):
     policy_scope: PolicyScope = "general"
     available_stock: int | None = None
     inventory_checked_at: datetime | None = None
+    citation: str | None = None
+    citation_ref: str | None = None
+    chunk_id: str | None = None
+    policy_source_hash: str | None = None
+    authorization_rule: dict = Field(default_factory=dict)
+    guard_evaluation: dict = Field(default_factory=dict)
 
 
 class ActionProposal(BaseModel):
@@ -60,6 +67,10 @@ class PolicyEvidence(BaseModel):
     title: str
     citation: str
     source: str
+    citation_ref: str
+    chunk_id: str
+    line_start: int
+    line_end: int
     retrieval_mode: Literal["chroma", "chroma_local", "chroma_local_consensus", "local_consensus", "demo", "registry"]
 
 

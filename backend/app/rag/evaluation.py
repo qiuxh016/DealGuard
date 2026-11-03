@@ -12,15 +12,65 @@ TOPIC_TERMS = {
     "EVAL-PRODUCT": ("product a", "product specific", "catalog", "category", "series", "selected product", "product line", "model"),
 }
 TOKEN_PATTERN = re.compile(r"[a-z]+")
+ENGLISH_STOPWORDS = {
+    "a", "an", "and", "are", "as", "at", "be", "been", "being", "but", "by",
+    "can", "could", "do", "does", "for", "from", "had", "has", "have", "how",
+    "i", "if", "in", "into", "is", "it", "its", "me", "my", "of", "on", "or",
+    "our", "please", "should", "the", "their", "them", "there", "these", "this",
+    "those", "to", "was", "we", "were", "what", "when", "where", "which", "who",
+    "will", "with", "would", "you", "your",
+}
+BILINGUAL_POLICY_TERMS = {
+    "批量": "bulk volume quantity",
+    "大批量": "bulk high-volume quantity",
+    "大宗采购": "wholesale bulk purchase",
+    "采购": "purchase order",
+    "价格减让": "discount concession",
+    "提前付款": "prepay upfront early payment",
+    "预付款": "prepay upfront payment",
+    "及时结款": "prompt payment settle",
+    "七天内": "within seven days",
+    "付清": "settle payment",
+    "发票": "invoice bill",
+    "指定系列": "designated series product line",
+    "产品类别": "product category",
+    "产品线": "product line",
+    "商品系列": "product series catalog item",
+    "专属商品": "product-specific catalog item",
+    "会员回馈": "loyalty rebate member benefit",
+    "忠诚客户": "loyal customer loyalty",
+    "长期合作": "long-standing relationship",
+    "续购": "repeat purchase",
+    "回头客": "returning customer",
+    "年末活动": "year-end campaign",
+    "节日促销": "holiday promotion campaign",
+    "活动折扣": "campaign discount promotion",
+}
 
 
-def _tokens(text: str) -> list[str]:
-    return TOKEN_PATTERN.findall(text.lower())
+def _tokens(text: str, include_cjk: bool = False) -> list[str]:
+    lowered = text.lower()
+    tokens = [token for token in TOKEN_PATTERN.findall(lowered) if token not in ENGLISH_STOPWORDS]
+    if include_cjk:
+        for run in re.findall(r"[\u4e00-\u9fff]+", lowered):
+            tokens.extend([run] if len(run) == 1 else [run[i:i + 2] for i in range(len(run) - 1)])
+    return tokens
 
 
-def _bm25_rank(query: str, candidate_ids: list[str], sources: dict[str, str]) -> list[str]:
-    documents = {policy_id: _tokens(sources[policy_id]) for policy_id in candidate_ids}
-    query_terms = sorted(set(_tokens(query)))
+def _bilingual_query_matches(query: str) -> list[str]:
+    lowered = query.lower()
+    return [phrase for phrase in BILINGUAL_POLICY_TERMS if phrase in lowered]
+
+
+def _expand_bilingual_query(query: str) -> str:
+    expansions = [BILINGUAL_POLICY_TERMS[phrase] for phrase in _bilingual_query_matches(query)]
+    return f"{query} {' '.join(expansions)}" if expansions else query
+
+
+def _bm25_scores(query: str, candidate_ids: list[str], sources: dict[str, str], include_cjk: bool = False) -> dict[str, float]:
+    documents = {policy_id: _tokens(sources[policy_id], include_cjk) for policy_id in candidate_ids}
+    expanded_query = _expand_bilingual_query(query) if include_cjk else query
+    query_terms = sorted(set(_tokens(expanded_query, include_cjk)))
     average_length = sum(map(len, documents.values())) / max(len(documents), 1)
     scores: dict[str, float] = {}
     for policy_id, document in documents.items():
@@ -36,7 +86,12 @@ def _bm25_rank(query: str, candidate_ids: list[str], sources: dict[str, str]) ->
                 frequency + 1.5 * (1 - 0.75 + 0.75 * len(document) / average_length)
             )
         scores[policy_id] = score
-    return sorted(scores, key=lambda policy_id: (-scores[policy_id], policy_id))
+    return scores
+
+
+def _bm25_rank(query: str, candidate_ids: list[str], sources: dict[str, str], include_cjk: bool = False) -> list[str]:
+    scores = _bm25_scores(query, candidate_ids, sources, include_cjk)
+    return sorted(scores, key=lambda candidate_id: (-scores[candidate_id], candidate_id))
 
 
 def _dense_test_rank(query: str, candidate_ids: list[str], sources: dict[str, str]) -> list[str]:

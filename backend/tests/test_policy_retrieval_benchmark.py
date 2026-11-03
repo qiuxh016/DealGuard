@@ -98,7 +98,8 @@ def test_multi_policy_case_retrieves_exact_citation_and_guard_decision(multi_pol
             Policy.policy_id == case["expected_policy_id"],
             Policy.version == case["expected_version"],
         ))
-        assert evidence["citation"] == policy.source
+        assert evidence["citation"] in policy.source
+        assert evidence["citation_ref"].startswith(f"{case['expected_policy_id']}@{case['expected_version']}#L")
         assert evidence["source"] not in {"EVAL-REFERENCE@v1", "EVAL-EXPIRED@v1", "EVAL-OTHER-TENANT@v1"}
         assert db.scalar(select(func.count()).select_from(QuoteDraft)) == case["expected_quote_count"]
         assert db.scalar(select(func.count()).select_from(ApprovalRequest)) == case["expected_approval_count"]

@@ -4,7 +4,6 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import "../history.css";
 
-type Actor = "sales_a" | "sales_b" | "admin" | "manager";
 type RunSummary = {
   run_id: string; actor_id: string; status: string; execution_mode: string; decision: string | null;
   reason_code: string | null; policy_id: string | null; policy_version: string | null;
@@ -13,11 +12,11 @@ type RunSummary = {
 type RunDetail = { run_id: string; status: string; execution_mode: string; intent?: unknown; decision?: unknown; quote?: unknown; policy_evidence: unknown[]; trace: unknown[] };
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
-const DEMO_MODE = process.env.NODE_ENV !== "production";
 const money = (value: string | null) => value === null ? "—" : `$${Number(value).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
 
 export default function RunsPage() {
-  const [actor, setActor] = useState<Actor>("sales_a");
+  const [actor, setActor] = useState("");
+  const [role, setRole] = useState("");
   const [rows, setRows] = useState<RunSummary[]>([]);
   const [detail, setDetail] = useState<RunDetail | null>(null);
   const [decision, setDecision] = useState("");
@@ -28,7 +27,7 @@ export default function RunsPage() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
 
-  const headers = useCallback((): Record<string, string> => DEMO_MODE ? { "X-Demo-Actor": actor } : {}, [actor]);
+  const headers = useCallback((): Record<string, string> => ({}), []);
   const loadRuns = useCallback(async (event?: FormEvent) => {
     event?.preventDefault(); setBusy(true); setNotice("");
     const params = new URLSearchParams();
@@ -47,12 +46,13 @@ export default function RunsPage() {
   }, [createdFrom, createdTo, decision, headers, policyVersion, status]);
 
   useEffect(() => {
-    if (!DEMO_MODE) void fetch(`${API}/api/v1/auth/me`, { credentials: "include", cache: "no-store" }).then(async (response) => {
+    void fetch(`${API}/api/v1/auth/me`, { credentials: "include", cache: "no-store" }).then(async (response) => {
       if (!response.ok) throw new Error("请先登录后查看运行记录");
-      const user = await response.json(); setActor(user.actor_id as Actor);
+      const user = await response.json(); setActor(user.actor_id); setRole(user.role);
     }).catch((error) => setNotice(error instanceof Error ? error.message : "登录状态无效"));
   }, []);
   useEffect(() => {
+    if (!actor) return;
     void fetch(`${API}/api/v1/runs`, { headers: headers(), credentials: "include", cache: "no-store" }).then(async (response) => {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload?.detail?.message ?? "无法读取运行记录");
@@ -71,8 +71,7 @@ export default function RunsPage() {
   }
 
   return <main className="dg-history"><div className="dg-history-main">
-    <header className="dg-history-head"><div><h1>运行记录</h1><p>查看受当前身份权限约束的决策、政策版本和 Trace。</p></div><nav className="dg-history-nav"><Link href="/">工作台</Link>{(actor === "manager" || actor === "admin") && <Link href="/evaluation">检索评测</Link>}{actor === "admin" && <Link href="/audit">政策审计</Link>}</nav></header>
-    {DEMO_MODE && <label>演示身份 <select className="dg-history-actor" value={actor} onChange={(event) => { setRows([]); setDetail(null); setNotice(""); setActor(event.target.value as Actor); }}><option value="sales_a">Sales A</option><option value="sales_b">Sales B</option><option value="manager">Demo Manager</option><option value="admin">Demo Admin</option></select></label>}
+    <header className="dg-history-head"><div><h1>运行记录</h1><p>查看受当前身份权限约束的决策、政策版本和 Trace。</p></div><nav className="dg-history-nav"><Link href="/">工作台</Link>{(role === "manager" || role === "admin") && <Link href="/evaluation">检索评测</Link>}{role === "admin" && <Link href="/audit">政策审计</Link>}</nav></header>
     <section className="dg-history-panel" style={{ marginTop: 12 }}>
       <form className="dg-history-filters" onSubmit={(event) => void loadRuns(event)}>
         <label>决策<select value={decision} onChange={(event) => setDecision(event.target.value)}><option value="">全部</option>{["ALLOW", "REVIEW", "DENY", "NEEDS_INPUT"].map((value) => <option key={value}>{value}</option>)}</select></label>

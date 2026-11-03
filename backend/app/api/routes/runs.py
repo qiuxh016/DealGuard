@@ -9,7 +9,7 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
-from app.agents.workflow import build_workflow
+from app.agents.workflow import WorkflowStepFailure, build_workflow
 from app.core.config import settings
 from app.db.database import get_db
 from app.db.models import ApprovalRequest, RunRecord
@@ -134,7 +134,12 @@ def create_run(
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key", max_length=128),
     db: Session = Depends(get_db),
 ) -> RunResponse:
-    request_hash = sha256(body.inquiry.encode("utf-8")).hexdigest()
+    customer_id = body.customer_id or actor.customer_id
+    if customer_id is None:
+        raise HTTPException(status_code=422, detail={"code": "CUSTOMER_REQUIRED", "message": "Select a customer before running an inquiry."})
+    if actor.customer_id and customer_id != actor.customer_id:
+        raise HTTPException(status_code=403, detail={"code": "RESOURCE_NOT_OWNED", "message": "This account cannot quote for the selected customer."})
+    request_hash = sha256(f"{customer_id}\\0{body.inquiry}".encode("utf-8")).hexdigest()
     if idempotency_key is not None:
         idempotency_key = idempotency_key.strip()
         if not idempotency_key:
@@ -173,7 +178,7 @@ def create_run(
                 raise
     run_attempt = record.attempt
     initial = {
-        "run_id": run_id, "actor": actor, "session": db, "raw_inquiry": body.inquiry,
+        "run_id": run_id, "actor": actor, "session": db, "raw_inquiry": body.inquiry, "customer_id": customer_id,
         "execution_mode": mode, "events": [], "status": "completed",
     }
     try:
@@ -195,7 +200,7 @@ def create_run(
                 discount_pct=proposal["requested_discount_pct"], policy_id=response.decision.policy_id,
                 policy_version=response.decision.policy_version, policy_scope=(state.get("intent") or {}).get("policy_scope") or "general",
                 state="PENDING", reason=response.decision.reason_code,
-                lines=state.get("line_results") and [{"proposal": r["proposal"], "policy_id": r["decision"]["policy_id"], "policy_version": r["decision"]["policy_version"], "policy_source": r["policy_source"], "available_stock": r["available_stock"], "inventory_checked_at": r["inventory_checked_at"]} for r in state["line_results"]] or None,
+                lines=state.get("line_results") and [{"proposal": r["proposal"], "policy_id": r["decision"]["policy_id"], "policy_version": r["decision"]["policy_version"], "policy_source": r["policy_source"], "policy_provenance": r["policy_provenance"], "available_stock": r["available_stock"], "inventory_checked_at": r["inventory_checked_at"]} for r in state["line_results"]] or None,
             )
             db.add(approval)
             db.flush()
@@ -204,18 +209,28 @@ def create_run(
                 step="request_approval", status="pending", message="Saved a manager approval request; no quote was created.",
                 timestamp=datetime.now(timezone.utc), details={"approval_id": approval.id},
             ))
-    except Exception:
+    except Exception as error:
         logger.exception("DealGuard run %s failed", run_id)
         db.rollback()
         record = db.get(RunRecord, run_id)
+        reason_code = error.reason_code if isinstance(error, WorkflowStepFailure) else "WORKFLOW_FAILED"
+        failure_step = error.step if isinstance(error, WorkflowStepFailure) else "workflow"
+        failure_message = {
+            "LLM_PROVIDER_UNAVAILABLE": "The configured language model is temporarily unavailable; no quote was created.",
+            "LLM_PROVIDER_TIMEOUT": "The configured language model timed out; no quote was created.",
+            "LLM_CREDENTIALS_INVALID": "The configured language model credentials were rejected; no quote was created.",
+            "LLM_REQUEST_INVALID": "The configured language model rejected the request; no quote was created.",
+            "LLM_INVALID_OUTPUT": "The configured language model returned unusable structured data; no quote was created.",
+            "LLM_REQUEST_FAILED": "The configured language model request failed; no quote was created.",
+        }.get(reason_code, "The configured model or workflow failed; no quote was created.")
         event = TraceEvent(
-            step="workflow", status="failed",
-            message="The configured model or workflow failed; no quote was created.",
-            timestamp=datetime.now(timezone.utc), details={"reason_code": "WORKFLOW_FAILED"},
+            step=failure_step, status="failed",
+            message=failure_message,
+            timestamp=datetime.now(timezone.utc), details={"reason_code": reason_code},
         )
         response = RunResponse(
             run_id=run_id, status="failed", execution_mode=mode,
-            decision={"decision": "DENY", "reason_code": "WORKFLOW_FAILED", "human_message": event.message},
+            decision={"decision": "DENY", "reason_code": reason_code, "human_message": event.message},
             trace=[event],
         )
     response.duration_ms = round((perf_counter() - started) * 1000)

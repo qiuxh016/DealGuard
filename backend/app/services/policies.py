@@ -29,7 +29,7 @@ def activate_policy(db: Session, actor: DemoActor, policy_row_id: str) -> Policy
     if not has_capability(actor, "policies.activate"):
         add_policy_audit_event(db, actor, "policy_activation_attempt", "DENIED", "ADMIN_REQUIRED")
         db.commit()
-        raise HTTPException(status_code=403, detail={"code": "ADMIN_REQUIRED", "message": "Only the demo admin can activate a policy."})
+        raise HTTPException(status_code=403, detail={"code": "ADMIN_REQUIRED", "message": "Only workspace administrators can activate a policy."})
     selected = db.scalar(select(Policy).where(Policy.id == policy_row_id, Policy.tenant_id == actor.tenant_id))
     if selected is None:
         add_policy_audit_event(db, actor, "policy_activation_attempt", "DENIED", "POLICY_NOT_FOUND")

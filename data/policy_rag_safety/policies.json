@@ -1,0 +1,28 @@
+{
+  "policies": [
+    {
+      "policy_id": "EVAL-BULK", "version": "v1", "title": "Volume purchase discount", "action_type": "quote_discount", "customer_tier": "VIP", "max_discount_pct": "10", "review_max_discount_pct": null, "exception_approval_allowed": false, "policy_scope": "bulk_order", "scope_product_id": null,
+      "source": "# Volume Purchase Discount\n\n## Eligibility\n\nFor verified VIP customers placing bulk, wholesale, pallet or high-volume orders, this policy provides a quantity-based discount.\n\n## Authorization limit\n\nThe structured direct discount limit is 10%. Requests above 10% are denied.\n\n## Commercial effect\n\nAn approved quote is a non-binding draft and does not create an order."
+    },
+    {
+      "policy_id": "EVAL-BULK-ALT", "version": "v1", "title": "Consolidated freight discount", "action_type": "quote_discount", "status": "inactive", "customer_tier": "VIP", "max_discount_pct": "10", "review_max_discount_pct": null, "exception_approval_allowed": false, "policy_scope": "bulk_order", "scope_product_id": null,
+      "source": "# Consolidated Freight Discount\n\n## Eligibility\n\nVerified VIP buyers shipping containerized freight in consolidated multi-crate consignments may receive a shipment consolidation discount.\n\n## Authorization limit\n\nThe structured direct discount limit is 10%. Requests above 10% are denied.\n\n## Commercial effect\n\nAn approved quote is a non-binding draft and does not create an order."
+    },
+    {
+      "policy_id": "EVAL-LOYALTY", "version": "v1", "title": "Repeat customer loyalty discount", "action_type": "quote_discount", "customer_tier": "VIP", "max_discount_pct": "5", "review_max_discount_pct": "8", "exception_approval_allowed": true, "policy_scope": "loyalty", "scope_product_id": null,
+      "source": "# VIP Loyalty Benefit\n\n## Eligibility\n\nReturning VIP accounts with a long-standing relationship may receive a loyalty rebate on a repeat purchase.\n\n## Direct limit and exception\n\nUp to 5% is allowed directly. More than 5% and no more than 8% requires manager approval; larger requests are denied.\n\n## Commercial effect\n\nAn approved quote is a non-binding draft and does not create an order."
+    },
+    {
+      "policy_id": "EVAL-EARLYPAY", "version": "v1", "title": "Early payment concession", "action_type": "quote_discount", "customer_tier": "VIP", "max_discount_pct": "7", "review_max_discount_pct": null, "exception_approval_allowed": false, "policy_scope": "early_payment", "scope_product_id": null,
+      "source": "# Early Payment Concession\n\n## Eligibility\n\nVerified VIP customers who prepay, pay upfront or settle an invoice within seven days may receive an early-payment concession.\n\n## Authorization limit\n\nThe structured direct discount limit is 7%. Requests above 7% are denied.\n\n## Commercial effect\n\nAn approved quote is a non-binding draft and does not create an order."
+    },
+    {
+      "policy_id": "EVAL-SEASON", "version": "v1", "title": "Seasonal campaign offer", "action_type": "quote_discount", "customer_tier": "VIP", "max_discount_pct": "6", "review_max_discount_pct": "9", "exception_approval_allowed": true, "policy_scope": "seasonal_campaign", "scope_product_id": null,
+      "source": "# Seasonal Campaign Offer\n\n## Eligibility\n\nDuring an administrator-approved holiday, spring, summer or year-end campaign, verified VIP customers may request a seasonal promotion.\n\n## Direct limit and exception\n\nUp to 6% is allowed directly. More than 6% and no more than 9% requires manager approval; larger requests are denied.\n\n## Commercial effect\n\nAn approved quote is a non-binding draft and does not create an order."
+    },
+    {
+      "policy_id": "EVAL-PRODUCT", "version": "v1", "title": "Product category promotion", "action_type": "quote_discount", "customer_tier": "VIP", "max_discount_pct": "4", "review_max_discount_pct": null, "exception_approval_allowed": false, "policy_scope": "product_specific", "scope_product_id": "P-100",
+      "source": "# Product Category Promotion\n\n## Eligibility\n\nThe promotion applies only to P-100, a listed Product A catalog item in the designated series and product category.\n\n## Authorization limit\n\nThe structured direct discount limit is 4%. Requests above 4% are denied.\n\n## Commercial effect\n\nAn approved quote is a non-binding draft and does not create an order."
+    }
+  ]
+}

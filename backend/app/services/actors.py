@@ -47,14 +47,12 @@ def get_demo_actor(db: Session, actor_id: str) -> DemoActor:
 
 
 def get_current_actor(request: Request, db: Session = Depends(get_db)) -> DemoActor:
-    demo_actor = request.headers.get("X-Demo-Actor")
-    if settings.app_env != "production" and demo_actor:
-        return get_demo_actor(db, demo_actor)
     token = request.cookies.get(COOKIE_NAME)
     if token:
         return get_session_actor(request, db)
-    if settings.app_env != "production":
-        return get_demo_actor(db, demo_actor or "sales_a")
+    demo_actor = request.headers.get("X-Demo-Actor")
+    if settings.app_env != "production" and demo_actor:
+        return get_demo_actor(db, demo_actor)
     raise HTTPException(status_code=401, detail={"code": "AUTH_REQUIRED", "message": "Sign in to continue."})
 
 

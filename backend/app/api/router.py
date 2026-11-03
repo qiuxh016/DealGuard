@@ -9,6 +9,7 @@ from app.api.routes.runs import router as runs_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.audit import router as audit_router
 from app.api.routes.evaluation import router as evaluation_router
+from app.api.routes.business_data import router as business_data_router
 
 api_router = APIRouter()
 api_router.include_router(runs_router, prefix="/api/v1")
@@ -20,3 +21,4 @@ api_router.include_router(approvals_router, prefix="/api/v1")
 api_router.include_router(policy_tools_router, prefix="/api/v1")
 api_router.include_router(audit_router, prefix="/api/v1")
 api_router.include_router(evaluation_router, prefix="/api/v1")
+api_router.include_router(business_data_router, prefix="/api/v1")

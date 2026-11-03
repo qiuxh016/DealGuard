@@ -1,0 +1,12 @@
+{"case_id":"low-rel-en-shipping","query":"Which ports do you ship from and what is the estimated delivery schedule?","expected_abstain":true}
+{"case_id":"low-rel-en-warranty","query":"Could you provide a warranty certificate for Product A?","expected_abstain":true}
+{"case_id":"low-rel-en-workspace","query":"How do I update the billing address in the workspace?","expected_abstain":true}
+{"case_id":"low-rel-en-connectivity","query":"Does Product A support USB-C connectivity?","expected_abstain":true}
+{"case_id":"low-rel-en-manual","query":"Where can I download the installation manual?","expected_abstain":true}
+{"case_id":"low-rel-en-safety","query":"Please send the latest product safety certification.","expected_abstain":true}
+{"case_id":"low-rel-zh-warehouse","query":"请问周末仓库是否营业，最晚几点可以提货？","expected_abstain":true}
+{"case_id":"low-rel-zh-warranty","query":"这款商品的质保期限是多少，可以提供检测证书吗？","expected_abstain":true}
+{"case_id":"low-rel-zh-address","query":"订单发出以后还能不能修改收货地址？","expected_abstain":true}
+{"case_id":"low-rel-zh-manual","query":"能否发送产品安装手册和技术规格？","expected_abstain":true}
+{"case_id":"low-rel-zh-invite","query":"如何邀请同事加入当前工作区？","expected_abstain":true}
+{"case_id":"low-rel-zh-shipping","query":"麻烦确认装货港、船期和预计到货日。","expected_abstain":true}

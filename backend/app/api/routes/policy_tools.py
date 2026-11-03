@@ -22,7 +22,7 @@ MAX_UPLOAD_BYTES = 1024 * 1024
 
 @router.get("/metrics", response_model=MetricsResponse)
 def get_metrics(actor: DemoActor = Depends(get_current_actor), db: Session = Depends(get_db)):
-    require_capability(actor, "metrics.read", code="METRICS_ROLE_REQUIRED", message="Only the demo manager or admin can view run metrics.")
+    require_capability(actor, "metrics.read", code="METRICS_ROLE_REQUIRED", message="Only workspace managers or administrators can view run metrics.")
     rows = db.scalars(select(RunRecord).where(RunRecord.tenant_id == actor.tenant_id)).all()
     decisions = [(row.result or {}).get("decision", {}).get("decision") for row in rows]
     durations = [row.duration_ms for row in rows if row.duration_ms is not None]
@@ -45,7 +45,7 @@ def _admin(actor: DemoActor, db: Session, action: str, policy_id: str | None = N
     if not has_capability(actor, "policy_drafts.manage"):
         add_policy_audit_event(db, actor, action, "DENIED", "ADMIN_REQUIRED", policy_id, version)
         db.commit()
-        raise HTTPException(status_code=403, detail={"code": "ADMIN_REQUIRED", "message": "Only the demo admin can manage policy drafts."})
+        raise HTTPException(status_code=403, detail={"code": "ADMIN_REQUIRED", "message": "Only workspace administrators can manage policy drafts."})
 
 
 def _draft_response(row: PolicyDraft) -> PolicyDraftResponse:
@@ -178,7 +178,7 @@ def compare_policies(body: PolicyDiffRequest, actor: DemoActor = Depends(get_cur
             breakdown = None
         elif customer is None or customer.tier != policy.customer_tier or product is None:
             decision = GuardDecision(decision="DENY", reason_code="POLICY_NOT_APPLICABLE", policy_id=policy.policy_id,
-                                     policy_version=policy.version, human_message="This policy does not apply to the trusted demo actor or requested product.")
+                                     policy_version=policy.version, human_message="This policy does not apply to the account's customer tier or requested product.")
             breakdown = None
         else:
             decision, breakdown = evaluate_quote(actor, customer, product, policy, proposal, intent.policy_scope)

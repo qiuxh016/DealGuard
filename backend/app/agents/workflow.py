@@ -1,12 +1,9 @@
 from datetime import datetime, timezone
 from decimal import Decimal
-from functools import lru_cache
 import re
 import time
 from typing import Any, TypedDict
-from uuid import uuid4
 
-from langchain_core.embeddings import Embeddings
 from langgraph.graph import END, START, StateGraph
 from pydantic import ValidationError
 from sqlalchemy import select
@@ -14,8 +11,32 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.models import Customer, DemoActor, Policy, Product, QuoteDraft
-from app.guards.business_rules import evaluate_quote
+from app.guards.business_rules import evaluate_quote_with_trace
 from app.schemas.deal import ActionProposal, InquiryIntent, PolicyEvidence, QuoteItemIntent, TraceEvent
+from app.rag.provenance import quote_provenance
+
+
+class WorkflowStepFailure(RuntimeError):
+    def __init__(self, step: str, reason_code: str):
+        super().__init__(reason_code)
+        self.step = step
+        self.reason_code = reason_code
+
+
+def _llm_failure_code(error: Exception) -> str:
+    status_code = getattr(error, "status_code", None)
+    if status_code in {401, 403}:
+        return "LLM_CREDENTIALS_INVALID"
+    if status_code == 429 or isinstance(status_code, int) and status_code >= 500:
+        return "LLM_PROVIDER_UNAVAILABLE"
+    if isinstance(status_code, int) and 400 <= status_code < 500:
+        return "LLM_REQUEST_INVALID"
+    error_type = type(error).__name__.lower()
+    if "timeout" in error_type:
+        return "LLM_PROVIDER_TIMEOUT"
+    if "connection" in error_type:
+        return "LLM_PROVIDER_UNAVAILABLE"
+    return "LLM_REQUEST_FAILED"
 
 
 class DealGuardState(TypedDict, total=False):
@@ -23,6 +44,7 @@ class DealGuardState(TypedDict, total=False):
     actor: DemoActor
     session: Session
     raw_inquiry: str
+    customer_id: str
     execution_mode: str
     intent: dict[str, Any]
     customer: Customer | None
@@ -31,6 +53,9 @@ class DealGuardState(TypedDict, total=False):
     policy: Policy | None
     evidence: list[dict[str, Any]]
     retrieval_ambiguous: bool
+    evidence_low_relevance: bool
+    policy_conflict: bool
+    policy_conflict_edges: list[dict[str, Any]]
     proposal: dict[str, Any]
     decision: dict[str, Any]
     breakdown: dict[str, Any] | None
@@ -42,32 +67,6 @@ class DealGuardState(TypedDict, total=False):
     usage: dict[str, int]
     scope_ambiguous: bool
     scope_not_found: bool
-
-
-@lru_cache(maxsize=1)
-def _load_local_embedding_model(model_path: str) -> Any:
-    from sentence_transformers import SentenceTransformer
-
-    return SentenceTransformer(model_path, device="cpu")
-
-
-class _LocalPolicyEmbeddings(Embeddings):
-    """SentenceTransformer adapter using Qwen3's instructed query format."""
-
-    def __init__(self, model_path: str):
-        self.model = _load_local_embedding_model(model_path)
-
-    def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        vectors = self.model.encode(texts, normalize_embeddings=True, convert_to_numpy=True)
-        return vectors.tolist()
-
-    def embed_query(self, text: str) -> list[float]:
-        query = (
-            "Instruct: Retrieve trade policy passages that govern the requested discount, "
-            "customer tier, products, quantity, and business action.\nQuery: " + text
-        )
-        vector = self.model.encode(query, normalize_embeddings=True, convert_to_numpy=True)
-        return vector.tolist()
 
 
 _POLICY_SCOPE_PATTERNS = {
@@ -165,13 +164,14 @@ def _event(step: str, status: str, message: str, details: dict[str, Any] | None 
 
 def _parse_demo_inquiry(raw: str) -> InquiryIntent:
     policy_scope = _infer_policy_scope(raw)
-    item_matches = re.findall(r"(P-\d+)\s*[:,-]?\s*([\d,]+)\s*(?:units?|pieces?)\s*(?:at\s*)?([\d.]+)\s*%", raw, re.IGNORECASE)
+    item_matches = re.findall(r"(P-[A-Z0-9_-]+)\s*[:,-]?\s*([\d,]+)\s*(?:units?|pieces?)\s*(?:at\s*)?([\d.]+)\s*%", raw, re.IGNORECASE)
     if len(item_matches) > 1:
         items = [QuoteItemIntent(product_id=pid.upper(), quantity=int(qty.replace(",", "")), requested_discount_pct=Decimal(discount)) for pid, qty, discount in item_matches]
         return InquiryIntent(items=items, policy_scope=policy_scope, customer_message=raw)
     quantity_match = re.search(r"(?<![-\d])([\d,]+)\s*-?\s*(?:units?|items?|pieces?|products?)\b", raw, re.IGNORECASE)
     discount_match = re.search(r"(?<![-\d])(\d+(?:\.\d+)?)\s*%", raw)
-    product_id = "P-100" if re.search(r"P-100|Product\s*A", raw, re.IGNORECASE) else None
+    product_match = re.search(r"\b(P-[A-Z0-9_-]+)\b", raw, re.IGNORECASE)
+    product_id = product_match.group(1).upper() if product_match else "P-100" if re.search(r"Product\s*A", raw, re.IGNORECASE) else None
     quantity = int(quantity_match.group(1).replace(",", "")) if quantity_match else None
     if quantity is not None and quantity <= 0:
         quantity = None
@@ -198,20 +198,23 @@ def _parse_intent(state: DealGuardState) -> dict[str, Any]:
             api_key=settings.llm_api_key,
             base_url=settings.llm_base_url or None,
             timeout=20,
-            max_retries=0,
+            max_retries=1,
             extra_body={"thinking": {"type": "disabled"}},
         ).with_structured_output(InquiryIntent, method="function_calling", include_raw=True)
-        parsed = model.invoke(
-            "Extract either legacy single product fields or an items list with product_id, positive quantity, and requested discount percent. "
-            "Copy explicit product IDs exactly; map the demo catalog names Product A to P-100 and Product B to P-200. "
-            "For a single item, set any missing field to null. Never default a missing discount to zero. "
-            "Extract policy_scope only from explicit inquiry wording; use one of general, bulk_order, loyalty, early_payment, seasonal_campaign, product_specific. "
-            "Use general when no specific discount program is mentioned; do not infer a special program from product/customer identity alone. "
-            "Set quantity to null when it is zero or negative; set discount to null when it is below 0 or above 100. "
-            "Do not clamp, round, or otherwise change a number. For a multi-item request, return an empty items list if any line has a missing or invalid quantity or discount. "
-            "Do not infer or return customer identity, role, or customer tier. Keep the original inquiry as customer_message.\n\n"
-            + state["raw_inquiry"]
-        )
+        try:
+            parsed = model.invoke(
+                "Extract either legacy single product fields or an items list with product_id, positive quantity, and requested discount percent. "
+                "Copy explicit product IDs exactly; map the demo catalog names Product A to P-100 and Product B to P-200. "
+                "For a single item, set any missing field to null. Never default a missing discount to zero. "
+                "Extract policy_scope only from explicit inquiry wording; use one of general, bulk_order, loyalty, early_payment, seasonal_campaign, product_specific. "
+                "Use general when no specific discount program is mentioned; do not infer a special program from product/customer identity alone. "
+                "Set quantity to null when it is zero or negative; set discount to null when it is below 0 or above 100. "
+                "Do not clamp, round, or otherwise change a number. For a multi-item request, return an empty items list if any line has a missing or invalid quantity or discount. "
+                "Do not infer or return customer identity, role, or customer tier. Keep the original inquiry as customer_message.\n\n"
+                + state["raw_inquiry"]
+            )
+        except Exception as error:
+            raise WorkflowStepFailure("parse_intent", _llm_failure_code(error)) from error
         raw = parsed.get("raw") if isinstance(parsed, dict) else None
         intent = parsed.get("parsed") if isinstance(parsed, dict) else parsed
         parsing_error = parsed.get("parsing_error") if isinstance(parsed, dict) else None
@@ -219,7 +222,7 @@ def _parse_intent(state: DealGuardState) -> dict[str, Any]:
         if parsing_error is not None or intent is None:
             intent = _recover_safe_intent(raw, state["raw_inquiry"])
             if intent is None:
-                raise ValueError("The model returned no recoverable structured inquiry fields.")
+                raise WorkflowStepFailure("parse_intent", "LLM_INVALID_OUTPUT")
             event_status = "invalid_output_sanitized"
             message = "The model returned invalid fields; unsafe values were treated as missing."
         elif not isinstance(intent, InquiryIntent):
@@ -228,7 +231,7 @@ def _parse_intent(state: DealGuardState) -> dict[str, Any]:
             except ValidationError:
                 intent = _recover_safe_intent(raw, state["raw_inquiry"])
                 if intent is None:
-                    raise
+                    raise WorkflowStepFailure("parse_intent", "LLM_INVALID_OUTPUT")
                 event_status = "invalid_output_sanitized"
                 message = "The model returned invalid fields; unsafe values were treated as missing."
         usage_meta = getattr(raw, "usage_metadata", None) or getattr(raw, "response_metadata", {}).get("token_usage", {})
@@ -252,7 +255,8 @@ def _load_business_data(state: DealGuardState) -> dict[str, Any]:
     db = state["session"]
     actor = state["actor"]
     intent = InquiryIntent.model_validate(state["intent"])
-    customer = db.scalar(select(Customer).where(Customer.id == actor.customer_id, Customer.tenant_id == actor.tenant_id)) if actor.customer_id else None
+    customer_id = state.get("customer_id") or actor.customer_id
+    customer = db.scalar(select(Customer).where(Customer.id == customer_id, Customer.tenant_id == actor.tenant_id)) if customer_id else None
     if intent.items:
         products_by_id = {row.id: row for row in db.scalars(select(Product).where(Product.id.in_([item.product_id for item in intent.items]), Product.tenant_id == actor.tenant_id)).all()}
         products = [products_by_id[item.product_id] for item in intent.items if item.product_id in products_by_id]
@@ -267,8 +271,8 @@ def _load_business_data(state: DealGuardState) -> dict[str, Any]:
         "products": products,
         "events": state.get("events", []) + [_event(
             "load_business_data", "completed" if found else "needs_input",
-            "Loaded customer and product from the demo database." if found else "Customer or product could not be resolved from trusted records.",
-            {"customer_id": customer.id if customer else None, "product_id": product.id if product else None},
+            "Loaded customer and product from tenant business records." if found else "Customer or product could not be resolved from trusted records.",
+            {"customer_id": customer.id if customer else None, "requested_customer_id": customer_id, "tenant_id": actor.tenant_id, "product_id": product.id if product else None},
         )],
     }
 
@@ -311,74 +315,71 @@ def _retrieve_policy(state: DealGuardState) -> dict[str, Any]:
             ]
             candidates = scoped or [row for row in all_candidates if row.policy_scope == "general"]
     scope_not_found = bool(all_candidates) and not candidates and not scope_ambiguous
+    from app.rag.policy_graph import policy_conflict_graph
+    policy_graph = policy_conflict_graph(candidates)
+    conflict_edges = policy_graph["edges"]
+    policy_conflict = bool(conflict_edges)
     policy = None
     evidence: list[PolicyEvidence] = []
+    query_expansion_terms: list[str] = []
     mode = "demo"
     retrieval_ambiguous = False
+    evidence_low_relevance = False
     if candidates:
         query = state["raw_inquiry"]
-        if len(candidates) == 1:
-            policy = candidates[0]
-            mode = "registry"
-        elif settings.local_embedding_model_path:
-            from app.rag.evaluation import _bm25_rank
+        from app.rag.policy_chunks import policy_clauses
 
-            embeddings = _LocalPolicyEmbeddings(settings.local_embedding_model_path)
-            # Exact cosine over the small, already-filtered candidate set avoids
-            # temporary-index tie instability. Stable policy IDs break equal scores.
-            row_by_policy_id = {row.policy_id: row for row in candidates}
-            candidate_ids = sorted(row_by_policy_id)
-            sources = {policy_id: row_by_policy_id[policy_id].source for policy_id in candidate_ids}
-            query_vector = embeddings.embed_query(query)
-            document_vectors = embeddings.embed_documents([sources[policy_id] for policy_id in candidate_ids])
-            scores = {
-                policy_id: sum(left * right for left, right in zip(query_vector, vector, strict=True))
-                for policy_id, vector in zip(candidate_ids, document_vectors, strict=True)
-            }
-            vector_rank = sorted(candidate_ids, key=lambda policy_id: (-round(scores[policy_id], 8), policy_id))
-            lexical_rank = _bm25_rank(query, candidate_ids, sources)
-            if vector_rank and lexical_rank and vector_rank[0] == lexical_rank[0]:
-                policy = row_by_policy_id.get(vector_rank[0])
+        clauses_by_policy = {
+            row.policy_id: policy_clauses(row.policy_id, row.version, row.source)
+            for row in candidates
+        }
+        clause_by_id = {
+            clause["chunk_id"]: (row, clause)
+            for row in candidates
+            for clause in clauses_by_policy[row.policy_id]
+        }
+        clause_sources = {chunk_id: clause["text"] for chunk_id, (_, clause) in clause_by_id.items()}
+        selected_clause = None
+        if policy_conflict:
+            mode = "conflict_graph_abstain"
+        elif len(candidates) == 1:
+            from app.rag.evaluation import _bm25_scores, _bilingual_query_matches
+            clause_ids = sorted(clause_sources)
+            clause_scores = _bm25_scores(query, clause_ids, clause_sources, include_cjk=True)
+            ranked_clauses = sorted(clause_scores, key=lambda chunk_id: (-clause_scores[chunk_id], chunk_id))
+            query_expansion_terms = _bilingual_query_matches(query)
+            if not ranked_clauses or clause_scores[ranked_clauses[0]] <= 0:
+                evidence_low_relevance = True
+                mode = "registry_abstain"
             else:
-                retrieval_ambiguous = True
-            mode = "local_consensus" if policy else "local_abstain"
-        elif settings.llm_api_key and settings.embedding_model:
-            from langchain_chroma import Chroma
-            from langchain_openai import OpenAIEmbeddings
-
-            embeddings = OpenAIEmbeddings(
-                model=settings.embedding_model, api_key=settings.llm_api_key,
-                base_url=settings.llm_base_url or None,
-            )
-            # Keep policy documents isolated between concurrent and sequential inquiries.
-            index = Chroma.from_texts(
-                [row.source for row in candidates],
-                embeddings,
-                metadatas=[{"policy_row_id": row.id, "policy_id": row.policy_id, "version": row.version} for row in candidates],
-                collection_name=f"dealguard-policy-{uuid4().hex}",
-                collection_metadata={"hnsw:space": "cosine"},
-            )
-            try:
-                hits = index.similarity_search_with_relevance_scores(query, k=min(3, len(candidates)))
-                if hits:
-                    hit_id = hits[0][0].metadata.get("policy_row_id")
-                    policy = next((row for row in candidates if row.id == hit_id), None)
-            finally:
-                index.delete_collection()
-            mode = "chroma"
+                policy = candidates[0]
+                mode = "registry"
+                selected_clause = clause_by_id[ranked_clauses[0]][1]
+        else:
+            # Registry remains the sole authorization source. Never use a vector
+            # model to select between multiple otherwise eligible policies.
+            retrieval_ambiguous = True
+            mode = "registry_abstain"
         if policy is not None:
+            if selected_clause is None:
+                selected_clause = clauses_by_policy[policy.policy_id][0]
             evidence = [PolicyEvidence(
                 policy_id=policy.policy_id, version=policy.version, title=policy.title,
-                citation=policy.source, source=f"{policy.policy_id}@{policy.version}", retrieval_mode=mode,
+                citation=str(selected_clause["text"]), source=f"{policy.policy_id}@{policy.version}",
+                citation_ref=str(selected_clause["citation_ref"]), chunk_id=str(selected_clause["chunk_id"]),
+                line_start=int(selected_clause["line_start"]), line_end=int(selected_clause["line_end"]), retrieval_mode=mode,
             )]
     event = _event(
-        "retrieve_policy", "completed" if policy else "scope_ambiguous" if scope_ambiguous else "scope_unmatched" if scope_not_found else "ambiguous" if retrieval_ambiguous else "no_policy",
-        "Retrieved evidence from the active, effective policy scope." if policy else "The inquiry describes multiple discount scopes; clarification is required." if scope_ambiguous else "No active policy matches this explicit scope." if scope_not_found else "The lexical and local embedding retrievers disagree; no policy was selected." if retrieval_ambiguous else "No active effective policy applies; execution will fail closed.",
-        {"policy_version": policy.version if policy else None, "retrieval_mode": mode, "candidate_count": len(candidates), "scope": intent.policy_scope, "scope_ambiguous": scope_ambiguous, "scope_not_found": scope_not_found, "abstained": retrieval_ambiguous},
+        "retrieve_policy", "conflict" if policy_conflict else "low_relevance" if evidence_low_relevance else "completed" if policy else "scope_ambiguous" if scope_ambiguous else "scope_unmatched" if scope_not_found else "ambiguous" if retrieval_ambiguous else "no_policy",
+        "Overlapping eligible policies contain conflicting structured rules; authorization is blocked." if policy_conflict else "No lexical evidence matched the active policy text; quote authorization is blocked." if evidence_low_relevance else "Retrieved evidence from the active, effective policy scope." if policy else "The inquiry describes multiple discount scopes; clarification is required." if scope_ambiguous else "No active policy matches this explicit scope." if scope_not_found else "Multiple eligible Registry policies remain; clarification is required." if retrieval_ambiguous else "No active effective policy applies; execution will fail closed.",
+        {"policy_version": policy.version if policy else None, "retrieval_mode": mode, "candidate_count": len(candidates), "clause_count": sum(map(len, clauses_by_policy.values())) if candidates else 0, "citation_refs": [item.citation_ref for item in evidence], "query_expansion_terms": query_expansion_terms, "evidence_low_relevance": evidence_low_relevance, "policy_graph": policy_graph, "policy_conflict": policy_conflict, "scope": intent.policy_scope, "scope_ambiguous": scope_ambiguous, "scope_not_found": scope_not_found, "abstained": retrieval_ambiguous or policy_conflict or evidence_low_relevance},
     )
     return {
         "policy": policy, "evidence": [item.model_dump(mode="json") for item in evidence],
         "retrieval_ambiguous": retrieval_ambiguous,
+        "evidence_low_relevance": evidence_low_relevance,
+        "policy_conflict": policy_conflict,
+        "policy_conflict_edges": conflict_edges,
         "scope_ambiguous": scope_ambiguous,
         "scope_not_found": scope_not_found,
         "events": state.get("events", []) + [event],
@@ -389,11 +390,17 @@ def _validate(state: DealGuardState) -> dict[str, Any]:
     intent = InquiryIntent.model_validate(state["intent"])
     if intent.items:
         customer, products, policy = state.get("customer"), state.get("products", []), state.get("policy")
+        if state.get("policy_conflict"):
+            decision = {"decision": "DENY", "reason_code": "POLICY_CONFLICT", "policy_id": None, "policy_version": None, "human_message": "Conflicting active policies apply to this inquiry, so no quote was created. Ask an administrator to resolve the policy conflict."}
+            return {"decision": decision, "breakdown": None, "status": "completed", "events": state.get("events", []) + [_event("validate_proposal", "denied", decision["human_message"], {"reason_code": decision["reason_code"], "conflicts": state.get("policy_conflict_edges", [])})]}
         if state.get("scope_ambiguous"):
             decision = {"decision": "NEEDS_INPUT", "reason_code": "POLICY_SCOPE_AMBIGUOUS", "policy_id": None, "policy_version": None, "human_message": "The inquiry mentions more than one discount program. Please clarify which policy scope to apply."}
             return {"decision": decision, "breakdown": None, "status": "needs_input", "events": state.get("events", []) + [_event("validate_proposal", "needs_input", decision["human_message"], {"reason_code": decision["reason_code"]})]}
         if state.get("scope_not_found"):
             decision = {"decision": "DENY", "reason_code": "POLICY_SCOPE_NOT_FOUND", "policy_id": None, "policy_version": None, "human_message": "No active policy is configured for the requested discount scope."}
+            return {"decision": decision, "breakdown": None, "status": "completed", "events": state.get("events", []) + [_event("validate_proposal", "denied", decision["human_message"], {"reason_code": decision["reason_code"]})]}
+        if state.get("evidence_low_relevance"):
+            decision = {"decision": "DENY", "reason_code": "POLICY_EVIDENCE_LOW_RELEVANCE", "policy_id": None, "policy_version": None, "human_message": "No relevant policy text matched this inquiry, so the quote was not created. Please clarify the discount program or ask an administrator to review the policy."}
             return {"decision": decision, "breakdown": None, "status": "completed", "events": state.get("events", []) + [_event("validate_proposal", "denied", decision["human_message"], {"reason_code": decision["reason_code"]})]}
         if state.get("retrieval_ambiguous"):
             decision = {"decision": "DENY", "reason_code": "POLICY_RETRIEVAL_AMBIGUOUS", "policy_id": None, "policy_version": None, "human_message": "Applicable policy selection was ambiguous, so the quote was not created. Please ask an administrator to clarify the policy scope."}
@@ -407,9 +414,10 @@ def _validate(state: DealGuardState) -> dict[str, Any]:
         line_results, decisions = [], []
         for item, product in zip(intent.items, products):
             proposal = ActionProposal(customer_id=customer.id, product_id=product.id, quantity=item.quantity, requested_discount_pct=item.requested_discount_pct)
-            line_decision, breakdown = evaluate_quote(state["actor"], customer, product, policy, proposal, intent.policy_scope)
+            line_decision, breakdown, guard_checks = evaluate_quote_with_trace(state["actor"], customer, product, policy, proposal, intent.policy_scope)
             decisions.append(line_decision)
-            line_results.append({"proposal": proposal.model_dump(mode="json"), "decision": line_decision.model_dump(mode="json"), "breakdown": breakdown.model_dump(mode="json") if breakdown else None, "product_name": product.name, "currency": product.currency, "unit_price": str(product.unit_price), "available_stock": product.stock, "inventory_checked_at": datetime.now(timezone.utc).isoformat(), "policy_source": policy.source if policy else ""})
+            evidence = next((item for item in state.get("evidence", []) if item["policy_id"] == policy.policy_id and item["version"] == policy.version), None) if policy else None
+            line_results.append({"proposal": proposal.model_dump(mode="json"), "decision": line_decision.model_dump(mode="json"), "breakdown": breakdown.model_dump(mode="json") if breakdown else None, "product_name": product.name, "currency": product.currency, "unit_price": str(product.unit_price), "available_stock": product.stock, "inventory_checked_at": datetime.now(timezone.utc).isoformat(), "policy_source": policy.source if policy else "", "policy_provenance": quote_provenance(policy, line_decision, guard_checks, evidence.get("citation") if evidence else None, evidence.get("citation_ref") if evidence else None, evidence.get("chunk_id") if evidence else None) if policy else None})
         failed = next((d for d in decisions if d.decision == "DENY"), None)
         review = next((d for d in decisions if d.decision == "REVIEW"), None)
         if failed:
@@ -418,7 +426,7 @@ def _validate(state: DealGuardState) -> dict[str, Any]:
             chosen = decisions[0].model_copy(update={"decision": "REVIEW" if review else "ALLOW", "reason_code": review.reason_code if review else "WITHIN_POLICY", "human_message": "Every quote line passed policy checks." if not review else "At least one line requires manager approval."})
         first_proposal = line_results[0]["proposal"]
         proposal_data = {"customer_id": customer.id, "product_id": first_proposal["product_id"], "quantity": first_proposal["quantity"], "requested_discount_pct": first_proposal["requested_discount_pct"], "lines": [result["proposal"] for result in line_results]}
-        event = _event("validate_proposal", chosen.decision.lower(), chosen.human_message, {"reason_code": chosen.reason_code, "line_count": len(line_results), "line_decisions": [d.model_dump(mode="json") for d in decisions]})
+        event = _event("validate_proposal", chosen.decision.lower(), chosen.human_message, {"reason_code": chosen.reason_code, "line_count": len(line_results), "line_decisions": [d.model_dump(mode="json") for d in decisions], "line_provenance": [{"product_id": result["proposal"]["product_id"], "citation_ref": (result.get("policy_provenance") or {}).get("citation_ref"), "policy_source_hash": (result.get("policy_provenance") or {}).get("policy_source_hash"), "guard_evaluation": (result.get("policy_provenance") or {}).get("guard_evaluation")} for result in line_results]})
         return {"proposal": proposal_data, "line_results": line_results, "decision": chosen.model_dump(mode="json"), "breakdown": None, "status": "completed", "events": state.get("events", []) + [event]}
     missing = [name for name in ("product_id", "quantity", "requested_discount_pct") if getattr(intent, name) is None]
     if missing:
@@ -431,8 +439,14 @@ def _validate(state: DealGuardState) -> dict[str, Any]:
     if state.get("scope_ambiguous"):
         decision = {"decision": "NEEDS_INPUT", "reason_code": "POLICY_SCOPE_AMBIGUOUS", "policy_id": None, "policy_version": None, "human_message": "The inquiry mentions more than one discount program. Please clarify which policy scope to apply."}
         return {"decision": decision, "breakdown": None, "status": "needs_input", "events": state.get("events", []) + [_event("validate_proposal", "needs_input", decision["human_message"], {"reason_code": decision["reason_code"]})]}
+    if state.get("policy_conflict"):
+        decision = {"decision": "DENY", "reason_code": "POLICY_CONFLICT", "policy_id": None, "policy_version": None, "human_message": "Conflicting active policies apply to this inquiry, so no quote was created. Ask an administrator to resolve the policy conflict."}
+        return {"decision": decision, "breakdown": None, "status": "completed", "events": state.get("events", []) + [_event("validate_proposal", "denied", decision["human_message"], {"reason_code": decision["reason_code"], "conflicts": state.get("policy_conflict_edges", [])})]}
     if state.get("scope_not_found"):
         decision = {"decision": "DENY", "reason_code": "POLICY_SCOPE_NOT_FOUND", "policy_id": None, "policy_version": None, "human_message": "No active policy is configured for the requested discount scope."}
+        return {"decision": decision, "breakdown": None, "status": "completed", "events": state.get("events", []) + [_event("validate_proposal", "denied", decision["human_message"], {"reason_code": decision["reason_code"]})]}
+    if state.get("evidence_low_relevance"):
+        decision = {"decision": "DENY", "reason_code": "POLICY_EVIDENCE_LOW_RELEVANCE", "policy_id": None, "policy_version": None, "human_message": "No relevant policy text matched this inquiry, so the quote was not created. Please clarify the discount program or ask an administrator to review the policy."}
         return {"decision": decision, "breakdown": None, "status": "completed", "events": state.get("events", []) + [_event("validate_proposal", "denied", decision["human_message"], {"reason_code": decision["reason_code"]})]}
     if state.get("retrieval_ambiguous"):
         decision = {"decision": "DENY", "reason_code": "POLICY_RETRIEVAL_AMBIGUOUS", "policy_id": None, "policy_version": None, "human_message": "Applicable policy selection was ambiguous, so the quote was not created. Please ask an administrator to clarify the policy scope."}
@@ -445,13 +459,16 @@ def _validate(state: DealGuardState) -> dict[str, Any]:
         customer_id=customer.id, product_id=product.id, quantity=intent.quantity,
         requested_discount_pct=intent.requested_discount_pct,
     )
-    decision, breakdown = evaluate_quote(state["actor"], customer, product, policy, proposal, intent.policy_scope)
+    decision, breakdown, guard_checks = evaluate_quote_with_trace(state["actor"], customer, product, policy, proposal, intent.policy_scope)
+    evidence = next((item for item in state.get("evidence", []) if policy and item["policy_id"] == policy.policy_id and item["version"] == policy.version), None)
+    line_results = [{"proposal": proposal.model_dump(mode="json"), "decision": decision.model_dump(mode="json"), "breakdown": breakdown.model_dump(mode="json") if breakdown else None, "product_name": product.name, "currency": product.currency, "unit_price": str(product.unit_price), "available_stock": product.stock, "inventory_checked_at": datetime.now(timezone.utc).isoformat(), "policy_source": policy.source if policy else "", "policy_provenance": quote_provenance(policy, decision, guard_checks, evidence.get("citation") if evidence else None, evidence.get("citation_ref") if evidence else None, evidence.get("chunk_id") if evidence else None) if policy else None}]
     return {
         "proposal": proposal.model_dump(mode="json"),
         "decision": decision.model_dump(mode="json"),
         "breakdown": breakdown.model_dump(mode="json") if breakdown else None,
+        "line_results": line_results,
         "status": "completed",
-        "events": state.get("events", []) + [_event("validate_proposal", decision.decision.lower(), decision.human_message, {"reason_code": decision.reason_code, "policy_version": decision.policy_version})],
+        "events": state.get("events", []) + [_event("validate_proposal", decision.decision.lower(), decision.human_message, {"reason_code": decision.reason_code, "policy_version": decision.policy_version, "line_provenance": [{"product_id": product.id, "citation_ref": (line_results[0].get("policy_provenance") or {}).get("citation_ref"), "policy_source_hash": (line_results[0].get("policy_provenance") or {}).get("policy_source_hash"), "guard_evaluation": (line_results[0].get("policy_provenance") or {}).get("guard_evaluation")} ]})],
     }
 
 
@@ -462,7 +479,7 @@ def _save_quote(state: DealGuardState) -> dict[str, Any]:
     breakdown = state["breakdown"]
     if state.get("line_results"):
         results = state["line_results"]
-        lines = [{"product_id": r["proposal"]["product_id"], "product_name": r["product_name"], "currency": r["currency"], "quantity": r["proposal"]["quantity"], "unit_price": r["unit_price"], "discount_pct": r["proposal"]["requested_discount_pct"], "subtotal": r["breakdown"]["subtotal"], "discount_amount": r["breakdown"]["discount_amount"], "total": r["breakdown"]["total"], "policy_id": r["decision"]["policy_id"], "policy_version": r["decision"]["policy_version"], "policy_source": r["policy_source"], "policy_scope": state["intent"]["policy_scope"], "available_stock": r["available_stock"], "inventory_checked_at": r["inventory_checked_at"]} for r in results]
+        lines = [{"product_id": r["proposal"]["product_id"], "product_name": r["product_name"], "currency": r["currency"], "quantity": r["proposal"]["quantity"], "unit_price": r["unit_price"], "discount_pct": r["proposal"]["requested_discount_pct"], "subtotal": r["breakdown"]["subtotal"], "discount_amount": r["breakdown"]["discount_amount"], "total": r["breakdown"]["total"], "policy_id": r["decision"]["policy_id"], "policy_version": r["decision"]["policy_version"], "policy_source": r["policy_source"], "policy_scope": state["intent"]["policy_scope"], "available_stock": r["available_stock"], "inventory_checked_at": r["inventory_checked_at"], **(r["policy_provenance"] or {})} for r in results]
         first = lines[0]
         subtotal = sum((Decimal(line["subtotal"]) for line in lines), Decimal("0"))
         discount_amount = sum((Decimal(line["discount_amount"]) for line in lines), Decimal("0"))
@@ -472,6 +489,7 @@ def _save_quote(state: DealGuardState) -> dict[str, Any]:
         quote = {"id": row.id, "status": "DRAFT", "customer_id": row.customer_id, "product_id": row.product_id, "breakdown": {"currency": first["currency"], "unit_price": str(row.unit_price), "quantity": row.quantity, "discount_pct": str(row.discount_pct), "subtotal": str(row.subtotal), "discount_amount": str(row.discount_amount), "total": str(row.total)}, "policy_id": row.policy_id, "policy_version": row.policy_version, "policy_scope": row.policy_scope, "created_at": row.created_at.isoformat(), "lines": lines}
         return {"quote": quote, "events": state.get("events", []) + [_event("create_quote_draft", "completed", "Created a quote draft after every line passed Guard.", {"quote_id": row.id, "line_count": len(lines)})]}
     proposal = ActionProposal.model_validate(state["proposal"])
+    line = {"product_id": product.id, "product_name": product.name, "currency": product.currency, "quantity": proposal.quantity, "unit_price": str(product.unit_price), "discount_pct": str(proposal.requested_discount_pct), "subtotal": str(breakdown.subtotal), "discount_amount": str(breakdown.discount_amount), "total": str(breakdown.total), "policy_id": policy.policy_id, "policy_version": policy.version, "policy_source": policy.source, "policy_scope": state["intent"]["policy_scope"], "available_stock": product.stock, "inventory_checked_at": datetime.now(timezone.utc).isoformat(), **(state.get("line_results", [{}])[0].get("policy_provenance") or {})}
     row = QuoteDraft(
         tenant_id=state["actor"].tenant_id,
         owner_actor_id=state["actor"].id, customer_id=proposal.customer_id,
@@ -479,7 +497,7 @@ def _save_quote(state: DealGuardState) -> dict[str, Any]:
         unit_price=product.unit_price, discount_pct=proposal.requested_discount_pct,
         subtotal=breakdown["subtotal"], discount_amount=breakdown["discount_amount"],
         total=breakdown["total"], policy_id=policy.policy_id,
-        policy_version=policy.version, policy_scope=state["intent"]["policy_scope"], status="DRAFT",
+        policy_version=policy.version, policy_scope=state["intent"]["policy_scope"], lines=[line], status="DRAFT",
     )
     db.add(row)
     db.flush()
@@ -495,6 +513,7 @@ def _save_quote(state: DealGuardState) -> dict[str, Any]:
         "policy_id": row.policy_id, "policy_version": row.policy_version,
         "policy_scope": row.policy_scope,
         "created_at": row.created_at.isoformat(),
+        "lines": [line],
     }
     return {
         "quote": quote,

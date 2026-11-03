@@ -53,7 +53,7 @@ def test_postgres_tenant_migration_round_trip_preserves_rows():
     upgrade_database()
     with engine.connect() as connection:
         after = {table: connection.execute(text(f"SELECT count(*) FROM {table}")).scalar_one() for table in tables}
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0010_policy_applicability_scope"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0013_password_reset_tokens"
         assert connection.execute(text("SELECT count(*) FROM policies WHERE action_type = 'quote_discount'")).scalar_one() == after["policies"]
         assert after == before
         assert connection.execute(text("SELECT count(*) FROM customers WHERE tenant_id = 'harborlight-demo'")).scalar_one() == before["customers"]

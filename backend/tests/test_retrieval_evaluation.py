@@ -106,7 +106,8 @@ def test_retrieval_case_returns_expected_stored_citation(retrieval_corpus, case)
         policy_id=case["expected_policy_id"],
         version=case["expected_version"],
     ).one()
-    assert evidence["citation"] == stored_policy.source
+    assert evidence["citation"] in stored_policy.source
+    assert evidence["citation_ref"].startswith(f"{case['expected_policy_id']}@{case['expected_version']}#L")
 
 
 def test_retrieval_benchmark_cases_are_unique_and_have_required_labels():

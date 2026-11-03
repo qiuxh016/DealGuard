@@ -14,8 +14,9 @@ async def lifespan(_: FastAPI):
     from app.db.migrations import upgrade_database
 
     upgrade_database()
-    with SessionLocal() as db:
-        seed_demo_data(db)
+    if settings.app_env != "production":
+        with SessionLocal() as db:
+            seed_demo_data(db)
     yield
 
 app = FastAPI(title="DealGuard API", version="0.1.0", lifespan=lifespan)
