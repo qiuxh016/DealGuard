@@ -51,7 +51,7 @@ def get_current_actor(request: Request, db: Session = Depends(get_db)) -> DemoAc
     if token:
         return get_session_actor(request, db)
     demo_actor = request.headers.get("X-Demo-Actor")
-    if settings.app_env != "production" and demo_actor:
+    if settings.enable_demo_auth and settings.app_env != "production" and demo_actor:
         return get_demo_actor(db, demo_actor)
     raise HTTPException(status_code=401, detail={"code": "AUTH_REQUIRED", "message": "Sign in to continue."})
 

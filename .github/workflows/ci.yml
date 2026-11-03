@@ -23,6 +23,7 @@ jobs:
           --health-retries 20
     env:
       APP_ENV: development
+      ENABLE_DEMO_AUTH: "true"
       DATABASE_URL: postgresql+psycopg://dealguard:dealguard-ci-only@127.0.0.1:5432/dealguard
     steps:
       - uses: actions/checkout@v4

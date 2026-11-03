@@ -9,11 +9,19 @@ from app.db.seed import seed_demo_data
 from app.main import app
 
 
+@pytest.fixture(autouse=True)
+def isolate_auth_rate_limit(monkeypatch):
+    from app.api.routes import auth
+
+    monkeypatch.setattr(auth, "_login_failures", {})
+
+
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     from app.core.config import settings
 
     monkeypatch.setattr(settings, "app_env", "development")
+    monkeypatch.setattr(settings, "enable_demo_auth", True)
     monkeypatch.setattr(settings, "llm_api_key", "")
     monkeypatch.setattr(settings, "llm_model", "")
     engine = create_engine(URL.create("sqlite", database=str(tmp_path / "test.sqlite")), connect_args={"check_same_thread": False})

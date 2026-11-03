@@ -112,6 +112,13 @@ def test_production_rejects_demo_actor_header(client, monkeypatch):
     assert client.get("/api/v1/policies", headers={"X-Demo-Actor": "admin"}).status_code == 401
 
 
+def test_demo_actor_header_requires_explicit_opt_in(client, monkeypatch):
+    monkeypatch.setattr(settings, "enable_demo_auth", False)
+    response = client.get("/api/v1/policies", headers={"X-Demo-Actor": "sales_a"})
+    assert response.status_code == 401
+    assert response.json()["detail"]["code"] == "AUTH_REQUIRED"
+
+
 def test_policy_list_is_scoped_to_authenticated_tenant(client):
     factory = client.app.state.session_factory
     with factory() as db:

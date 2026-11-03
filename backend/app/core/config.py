@@ -3,6 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_env: str = "development"
+    enable_demo_auth: bool = False
     database_url: str = "sqlite:///data/dealguard.db"
     frontend_origin: str = "http://localhost:3000"
     llm_api_key: str = ""
