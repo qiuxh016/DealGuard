@@ -1,18 +1,19 @@
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.db.models import Customer, DemoActor, Policy, Product, QuoteDraft
+from app.db.models import Customer, DemoActor, Product, QuoteDraft
 from app.guards.business_rules import evaluate_quote_with_trace
 from app.rag.provenance import policy_source_hash, quote_provenance
 from app.schemas.deal import ActionProposal, QuoteBreakdown, QuoteDraftResponse, QuoteUpdateRequest
 from app.services.permissions import has_capability
+from app.services.policies import current_quote_policies
 
 
 def quote_response(row: QuoteDraft) -> QuoteDraftResponse:
     return QuoteDraftResponse(
         id=row.id, status="DRAFT", customer_id=row.customer_id, product_id=row.product_id,
         breakdown=QuoteBreakdown(
-            currency="USD", unit_price=row.unit_price, quantity=row.quantity,
+            currency=(row.lines or [{}])[0].get("currency", "USD"), unit_price=row.unit_price, quantity=row.quantity,
             discount_pct=row.discount_pct, subtotal=row.subtotal,
             discount_amount=row.discount_amount, total=row.total,
         ),
@@ -30,10 +31,11 @@ def update_quote(db: Session, actor: DemoActor, quote_id: str, body: QuoteUpdate
     if row.lines and len(row.lines) > 1:
         raise HTTPException(status_code=409, detail={"code": "MULTI_ITEM_UPDATE_UNSUPPORTED", "message": "Multi-item quote lines are immutable in this demo; create a new quote to change requested discounts."})
     product = db.query(Product).filter(Product.id == row.product_id, Product.tenant_id == actor.tenant_id).first()
-    active_policy = db.query(Policy).filter_by(tenant_id=actor.tenant_id, policy_id=row.policy_id, action_type="quote_discount", status="active", customer_tier="VIP").first()
     customer = db.query(Customer).filter(Customer.id == row.customer_id, Customer.tenant_id == actor.tenant_id).first()
-    if product is None or customer is None or active_policy is None:
+    active_policies = current_quote_policies(db, actor.tenant_id, customer.tier, row.policy_id) if customer else []
+    if product is None or customer is None or len(active_policies) != 1:
         raise HTTPException(status_code=409, detail={"code": "CURRENT_CONTEXT_UNAVAILABLE", "message": "Current quote context is unavailable; the draft was not changed."})
+    active_policy = active_policies[0]
     proposal = ActionProposal(
         kind="update_quote_draft", customer_id=row.customer_id, product_id=row.product_id,
         quantity=row.quantity, requested_discount_pct=body.requested_discount_pct,

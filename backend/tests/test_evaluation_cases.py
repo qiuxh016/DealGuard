@@ -36,10 +36,13 @@ def test_deterministic_evaluation_case(client, case):
             active.effective_to = datetime.now(timezone.utc)
         db.commit()
 
+    payload = {"inquiry": case["inquiry"]}
+    if case["actor"] in {"admin", "manager"}:
+        payload["customer_id"] = "C-001"
     response = client.post(
         "/api/v1/runs",
         headers={"X-Demo-Actor": case["actor"], "Idempotency-Key": f"eval-{case['case_id']}"},
-        json={"inquiry": case["inquiry"]},
+        json=payload,
     )
     assert response.status_code == 200, response.text
     result = response.json()

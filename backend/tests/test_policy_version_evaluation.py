@@ -76,11 +76,7 @@ def test_policy_version_case_splits_are_balanced_and_disjoint():
     }
 
 
-def test_multiple_current_policies_without_retrieval_provider_fail_closed(client, monkeypatch):
-    from app.core.config import settings
-
-    monkeypatch.setattr(settings, "llm_api_key", "")
-    monkeypatch.setattr(settings, "embedding_model", "")
+def test_multiple_conflicting_current_policies_fail_closed(client):
     with client.app.state.session_factory() as db:
         db.add(Policy(
             policy_id="DISCOUNT-OTHER", version="v1", title="Competing discount policy",
@@ -98,7 +94,7 @@ def test_multiple_current_policies_without_retrieval_provider_fail_closed(client
     assert response.status_code == 200
     result = response.json()
     assert result["decision"]["decision"] == "DENY"
-    assert result["decision"]["reason_code"] == "NO_APPLICABLE_POLICY"
+    assert result["decision"]["reason_code"] == "POLICY_CONFLICT"
     assert result["policy_evidence"] == []
     assert result["quote"] is None
     with client.app.state.session_factory() as db:

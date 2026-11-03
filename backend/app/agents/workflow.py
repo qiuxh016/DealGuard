@@ -277,29 +277,14 @@ def _load_business_data(state: DealGuardState) -> dict[str, Any]:
     }
 
 
-def _eligible_policy(row: Policy, now: datetime) -> bool:
-    starts = row.effective_from.replace(tzinfo=timezone.utc) if row.effective_from.tzinfo is None else row.effective_from
-    ends = row.effective_to
-    if ends is not None and ends.tzinfo is None:
-        ends = ends.replace(tzinfo=timezone.utc)
-    return starts <= now and (ends is None or now < ends)
-
-
 def _retrieve_policy(state: DealGuardState) -> dict[str, Any]:
     db = state["session"]
     customer = state.get("customer")
     all_candidates = []
     if customer is not None:
         now = datetime.now(timezone.utc)
-        all_candidates = [
-            row for row in db.scalars(select(Policy).where(
-                Policy.tenant_id == customer.tenant_id,
-                Policy.action_type == "quote_discount",
-                Policy.status == "active",
-                Policy.customer_tier == customer.tier,
-            )).all()
-            if _eligible_policy(row, now)
-        ]
+        from app.services.policies import current_quote_policies
+        all_candidates = current_quote_policies(db, customer.tenant_id, customer.tier, now=now)
     intent = InquiryIntent.model_validate(state.get("intent") or _parse_demo_inquiry(state["raw_inquiry"]).model_dump(mode="json"))
     scope_ambiguous = intent.policy_scope is None
     candidates = []

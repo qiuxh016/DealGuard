@@ -5,7 +5,7 @@ from sqlalchemy import select
 from app.db.models import DemoActor, Policy
 
 
-def test_registered_workspace_admin_can_setup_data_and_run_quote(client):
+def test_registered_workspace_admin_can_setup_data_and_invite_sales_to_run_quote(client):
     registered = client.post("/api/v1/auth/register", json={
         "organization_name": "Northwind Trading", "display_name": "Alex Morgan",
         "email": "owner@northwind.example", "password": "a-secure-password-123",
@@ -32,8 +32,16 @@ def test_registered_workspace_admin_can_setup_data_and_run_quote(client):
             tenant_id=actor.tenant_id,
         ))
         db.commit()
+    invitation = client.post("/api/v1/auth/invitations", json={
+        "email": "sales@northwind.example", "role": "sales", "customer_id": customer.json()["id"],
+    })
+    assert invitation.status_code == 201, invitation.text
+    accepted = client.post("/api/v1/auth/accept-invitation", json={
+        "token": invitation.json()["token"], "display_name": "Sam Sales", "password": "another-secure-password-456",
+    })
+    assert accepted.status_code == 201, accepted.text
     run = client.post("/api/v1/runs", json={
-        "inquiry": "Please quote P-900 10 units at 5%.", "customer_id": customer.json()["id"],
+        "inquiry": "Please quote P-900 10 units at 5% discount.", "customer_id": customer.json()["id"],
     })
     assert run.status_code == 200, run.text
     assert run.json()["decision"]["decision"] == "ALLOW", {"intent": run.json()["intent"], "load_details": run.json()["trace"][1]["details"]}

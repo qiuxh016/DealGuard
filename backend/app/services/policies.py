@@ -25,6 +25,34 @@ def list_policies(db: Session, tenant_id: str) -> list[PolicyResponse]:
     ]
 
 
+def is_policy_effective(policy: Policy, now: datetime | None = None) -> bool:
+    now = now or datetime.now(timezone.utc)
+    starts = policy.effective_from.replace(tzinfo=timezone.utc) if policy.effective_from.tzinfo is None else policy.effective_from
+    ends = policy.effective_to
+    if ends is not None and ends.tzinfo is None:
+        ends = ends.replace(tzinfo=timezone.utc)
+    return starts <= now and (ends is None or now < ends)
+
+
+def current_quote_policies(
+    db: Session,
+    tenant_id: str,
+    customer_tier: str,
+    policy_id: str | None = None,
+    now: datetime | None = None,
+) -> list[Policy]:
+    query = select(Policy).where(
+        Policy.tenant_id == tenant_id,
+        Policy.action_type == "quote_discount",
+        Policy.customer_tier == customer_tier,
+        Policy.status == "active",
+    )
+    if policy_id is not None:
+        query = query.where(Policy.policy_id == policy_id)
+    instant = now or datetime.now(timezone.utc)
+    return [row for row in db.scalars(query).all() if is_policy_effective(row, instant)]
+
+
 def activate_policy(db: Session, actor: DemoActor, policy_row_id: str) -> PolicyResponse:
     if not has_capability(actor, "policies.activate"):
         add_policy_audit_event(db, actor, "policy_activation_attempt", "DENIED", "ADMIN_REQUIRED")

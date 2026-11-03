@@ -10,7 +10,12 @@ from app.main import app
 
 
 @pytest.fixture
-def client(tmp_path):
+def client(tmp_path, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "app_env", "development")
+    monkeypatch.setattr(settings, "llm_api_key", "")
+    monkeypatch.setattr(settings, "llm_model", "")
     engine = create_engine(URL.create("sqlite", database=str(tmp_path / "test.sqlite")), connect_args={"check_same_thread": False})
     TestingSession = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
     Base.metadata.create_all(bind=engine)

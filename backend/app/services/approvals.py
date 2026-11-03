@@ -7,12 +7,13 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from app.db.models import ApprovalRequest, Customer, DemoActor, Policy, Product, QuoteDraft, RunRecord
+from app.db.models import ApprovalRequest, Customer, DemoActor, Product, QuoteDraft, RunRecord
 from app.guards.business_rules import calculate_breakdown, evaluate_quote_with_trace
 from app.rag.provenance import policy_source_hash, quote_provenance
 from app.schemas.deal import ActionProposal, ApprovalOutcome, ApprovalRequestResponse, QuoteBreakdown, TraceEvent
 from app.services.quotes import quote_response
 from app.services.permissions import has_capability
+from app.services.policies import current_quote_policies
 
 
 def _manager(actor: DemoActor) -> None:
@@ -112,8 +113,8 @@ def process_approval(db: Session, actor: DemoActor, approval_id: str, approve: b
                 break
             proposal_data = saved["proposal"]
             product = db.scalar(select(Product).where(Product.id == proposal_data["product_id"], Product.tenant_id == actor.tenant_id))
-            policies = db.scalars(select(Policy).where(Policy.tenant_id == actor.tenant_id, Policy.policy_id == saved["policy_id"], Policy.action_type == "quote_discount", Policy.customer_tier == customer.tier, Policy.status == "active")).all()
-            current = next((p for p in policies if (p.effective_from.replace(tzinfo=timezone.utc) if p.effective_from.tzinfo is None else p.effective_from) <= now and (p.effective_to is None or (p.effective_to.replace(tzinfo=timezone.utc) if p.effective_to.tzinfo is None else p.effective_to) > now)), None)
+            policies = current_quote_policies(db, actor.tenant_id, customer.tier, saved["policy_id"], now)
+            current = policies[0] if len(policies) == 1 else None
             if product is None:
                 stale_code = "APPROVAL_CONTEXT_CHANGED"
             elif current is None or current.version != saved["policy_version"]:
@@ -125,6 +126,7 @@ def process_approval(db: Session, actor: DemoActor, approval_id: str, approve: b
                 decision, breakdown, guard_checks = evaluate_quote_with_trace(applicant, customer, product, current, proposal, row.policy_scope)
                 if decision.decision not in {"ALLOW", "REVIEW"}:
                     stale_code = decision.reason_code
+                    break
                 elif breakdown is None:
                     breakdown = calculate_breakdown(product, proposal.quantity, proposal.requested_discount_pct)
                 provenance = quote_provenance(current, decision, guard_checks, saved.get("policy_provenance", {}).get("citation"), saved.get("policy_provenance", {}).get("citation_ref"), saved.get("policy_provenance", {}).get("chunk_id"))
@@ -147,9 +149,9 @@ def process_approval(db: Session, actor: DemoActor, approval_id: str, approve: b
         db.commit(); db.refresh(row); db.refresh(quote)
         return ApprovalOutcome(approval=ApprovalRequestResponse.model_validate(row, from_attributes=True), quote=quote_response(quote), trace=trace)
     product = db.scalar(select(Product).where(Product.id == row.product_id, Product.tenant_id == actor.tenant_id))
-    policies = db.scalars(select(Policy).where(Policy.tenant_id == actor.tenant_id, Policy.policy_id == row.policy_id, Policy.action_type == "quote_discount", Policy.customer_tier == (customer.tier if customer else ""), Policy.status == "active")).all()
     now = datetime.now(timezone.utc)
-    current = next((p for p in policies if (p.effective_from.replace(tzinfo=timezone.utc) if p.effective_from.tzinfo is None else p.effective_from) <= now and (p.effective_to is None or (p.effective_to.replace(tzinfo=timezone.utc) if p.effective_to.tzinfo is None else p.effective_to) > now)), None)
+    policies = current_quote_policies(db, actor.tenant_id, customer.tier, row.policy_id, now) if customer else []
+    current = policies[0] if len(policies) == 1 else None
     stale_code = None
     if applicant is None or not has_capability(applicant, "inquiry.run") or applicant.customer_id != row.customer_id or customer is None or product is None:
         stale_code = "APPROVAL_CONTEXT_CHANGED"

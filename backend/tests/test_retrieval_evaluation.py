@@ -57,13 +57,8 @@ def _policy(policy_id: str, title: str, source: str, *, tenant_id: str = "harbor
 
 
 @pytest.fixture
-def retrieval_corpus(client, monkeypatch):
+def retrieval_corpus(client):
     from app.agents import workflow
-    from app.core.config import settings
-
-    monkeypatch.setattr(settings, "llm_api_key", "test-key")
-    monkeypatch.setattr(settings, "embedding_model", "deterministic-test-adapter")
-    monkeypatch.setattr("langchain_openai.OpenAIEmbeddings", DeterministicTopicEmbeddings)
     now = datetime.now(timezone.utc)
     tenant_id = "retrieval-eval-tenant"
     with client.app.state.session_factory() as db:
@@ -89,6 +84,11 @@ def retrieval_corpus(client, monkeypatch):
 @pytest.mark.parametrize("case", CASES, ids=lambda case: case["case_id"])
 def test_retrieval_case_returns_expected_stored_citation(retrieval_corpus, case):
     workflow, db, customer = retrieval_corpus
+    db.query(Policy).filter_by(tenant_id=customer.tenant_id).update({Policy.status: "inactive"})
+    db.query(Policy).filter_by(
+        tenant_id=customer.tenant_id, policy_id=case["expected_policy_id"], version=case["expected_version"],
+    ).update({Policy.status: "active"})
+    db.commit()
     result = workflow._retrieve_policy({
         "session": db,
         "customer": customer,
@@ -100,7 +100,7 @@ def test_retrieval_case_returns_expected_stored_citation(retrieval_corpus, case)
     evidence = result["evidence"][0]
     assert evidence["source"] == f'{case["expected_policy_id"]}@{case["expected_version"]}'
     assert evidence["version"] == case["expected_version"]
-    assert evidence["retrieval_mode"] == "chroma"
+    assert evidence["retrieval_mode"] == "registry"
     stored_policy = db.query(Policy).filter_by(
         tenant_id=customer.tenant_id,
         policy_id=case["expected_policy_id"],
@@ -133,9 +133,12 @@ def test_retrieval_fails_closed_when_no_current_policy_applies(retrieval_corpus)
     assert result["events"][-1]["status"] == "no_policy"
 
 
-def test_retrieval_fails_closed_when_index_returns_no_hit(retrieval_corpus, monkeypatch):
+def test_retrieval_fails_closed_when_bm25_finds_no_evidence(retrieval_corpus, monkeypatch):
     workflow, db, customer = retrieval_corpus
-    monkeypatch.setattr("langchain_chroma.Chroma.similarity_search_with_relevance_scores", lambda *_args, **_kwargs: [])
+    db.query(Policy).filter_by(tenant_id=customer.tenant_id).update({Policy.status: "inactive"})
+    db.query(Policy).filter_by(tenant_id=customer.tenant_id, policy_id="DISCOUNT-TEST").update({Policy.status: "active"})
+    db.commit()
+    monkeypatch.setattr("app.rag.evaluation._bm25_scores", lambda _query, ids, _sources, **_kwargs: {item: 0 for item in ids})
 
     result = workflow._retrieve_policy({
         "session": db,
@@ -146,7 +149,8 @@ def test_retrieval_fails_closed_when_index_returns_no_hit(retrieval_corpus, monk
 
     assert result["policy"] is None
     assert result["evidence"] == []
-    assert result["events"][-1]["status"] == "no_policy"
+    assert result["evidence_low_relevance"] is True
+    assert result["events"][-1]["status"] == "low_relevance"
 
 
 def _tokens(text: str) -> list[str]:

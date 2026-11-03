@@ -5,7 +5,7 @@ from app.db.models import DemoActor
 ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
     "sales": frozenset({"inquiry.run", "business_data.read", "quote.read_own", "quote.update_own", "runs.read_own", "policies.read", "policy.diff"}),
     "manager": frozenset({"approvals.read", "approvals.decide", "metrics.read", "evaluation.read", "runs.read_tenant", "quote.read_tenant", "policies.read", "policy.diff"}),
-    "admin": frozenset({"inquiry.run", "business_data.read", "business_data.manage", "workspace.manage_members", "quote.read_tenant", "runs.read_tenant", "runs.read_all", "policies.read", "policy.diff", "policies.activate", "policy_drafts.manage", "demo.reset", "audit.read", "metrics.read", "evaluation.read"}),
+    "admin": frozenset({"business_data.read", "business_data.manage", "workspace.manage_members", "quote.read_tenant", "runs.read_tenant", "runs.read_all", "policies.read", "policy.diff", "policies.activate", "policy_drafts.manage", "demo.reset", "audit.read", "metrics.read", "evaluation.read"}),
 }
 
 

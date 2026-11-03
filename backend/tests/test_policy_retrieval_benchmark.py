@@ -2,7 +2,6 @@ import json
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-import re
 
 import pytest
 from sqlalchemy import func, select
@@ -16,33 +15,12 @@ POLICIES = json.loads((DATA_DIR / "policies.json").read_text(encoding="utf-8"))[
 CASES = [json.loads(line) for line in (DATA_DIR / "cases.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
-class DeterministicTopicEmbeddings:
-    """Lexical test adapter for retrieval plumbing; not a semantic model."""
-
-    def __init__(self, **_kwargs):
-        pass
-
-    @staticmethod
-    def _vector(text: str) -> list[float]:
-        normalized = re.sub(r"[-\s]+", " ", text.lower())
-        return [float(any(term in normalized for term in terms)) for terms in TOPIC_TERMS.values()]
-
-    def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        return [self._vector(text) for text in texts]
-
-    def embed_query(self, text: str) -> list[float]:
-        return self._vector(text)
-
-
 @pytest.fixture
 def multi_policy_corpus(client, monkeypatch):
     from app.core.config import settings
 
-    monkeypatch.setattr(settings, "llm_api_key", "test-key")
+    monkeypatch.setattr(settings, "llm_api_key", "")
     monkeypatch.setattr(settings, "llm_model", "")
-    monkeypatch.setattr(settings, "embedding_model", "deterministic-test-adapter")
-    monkeypatch.setattr(settings, "local_embedding_model_path", "")
-    monkeypatch.setattr("langchain_openai.OpenAIEmbeddings", DeterministicTopicEmbeddings)
     now = datetime.now(timezone.utc)
     with client.app.state.session_factory() as db:
         for row in db.scalars(select(Policy).where(Policy.tenant_id == "harborlight-demo")).all():
@@ -121,12 +99,7 @@ def test_multi_policy_benchmark_is_fixed_and_split_without_overlap():
     assert all(set(case["candidate_policy_ids"]) == valid_ids for case in CASES)
 
 
-def test_scope_filter_reduces_single_candidate_to_registry_without_embedding(multi_policy_corpus, client, monkeypatch):
-    from app.core.config import settings
-    from app.agents import workflow
-
-    monkeypatch.setattr(settings, "local_embedding_model_path", "local-test-model")
-    monkeypatch.setattr(workflow, "_LocalPolicyEmbeddings", lambda _path: pytest.fail("single scoped candidate should use Registry"))
+def test_scope_filter_reduces_single_candidate_to_registry(multi_policy_corpus, client):
     result = client.post(
         "/api/v1/runs",
         headers={"X-Demo-Actor": "sales_a", "Idempotency-Key": "scoped-registry-only"},

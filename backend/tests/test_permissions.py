@@ -15,7 +15,7 @@ from app.services.permissions import ROLE_CAPABILITIES, has_capability, require_
     ("admin", "audit.read", True),
     ("admin", "runs.read_all", True),
     ("manager", "runs.read_all", False),
-    ("admin", "inquiry.run", True),
+    ("admin", "inquiry.run", False),
     ("unknown", "demo.reset", False),
 ])
 def test_role_capability_matrix(role, capability, allowed):

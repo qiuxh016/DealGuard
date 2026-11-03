@@ -27,6 +27,10 @@ def count_approvals(client):
         return db.scalar(select(func.count()).select_from(ApprovalRequest))
 
 
+def request_hash(customer_id, inquiry):
+    return sha256(f"{customer_id}\0{inquiry}".encode("utf-8")).hexdigest()
+
+
 def test_health(client):
     response = client.get("/health")
     assert response.status_code == 200
@@ -80,12 +84,17 @@ def test_multi_item_failure_does_not_create_partial_quote(client, inquiry, reaso
 
 
 def test_multi_item_csv_exports_each_line_and_policy_source(client):
+    import csv
+    from io import StringIO
+
     result = client.post("/api/v1/runs", json={"inquiry": "Please quote P-100 10 units at 5%; P-200 4 units at 3%."}).json()
     exported = client.get(f"/api/v1/quotes/{result['quote']['id']}/export.csv")
     assert exported.status_code == 200
-    assert exported.text.count("DISCOUNT-01") == 2
-    assert "P-100" in exported.text and "P-200" in exported.text
-    assert "maximum discount is 10%" in exported.text
+    rows = list(csv.DictReader(StringIO(exported.text)))
+    assert len(rows) == 2
+    assert {row["product_id"] for row in rows} == {"P-100", "P-200"}
+    assert all(row["policy_id"] == "DISCOUNT-01" and row["policy_version"] == "v1" for row in rows)
+    assert all("10%" in row["policy_source"] for row in rows)
 
 
 def test_multi_item_review_revalidates_and_approves_all_lines(client):
@@ -170,7 +179,7 @@ def test_idempotency_key_reports_an_in_progress_request(client):
         db.add(RunRecord(
             id="in-progress-run", actor_id="sales_a", inquiry=inquiry, status="running",
             execution_mode="demo", result={}, idempotency_key="pending-key",
-            request_hash=sha256(inquiry.encode("utf-8")).hexdigest(),
+            request_hash=request_hash("C-001", inquiry),
             lease_expires_at=datetime.now(timezone.utc) + timedelta(seconds=30),
         ))
         db.commit()
@@ -188,7 +197,7 @@ def test_expired_idempotent_run_lease_is_reclaimed_safely(client):
         db.add(RunRecord(
             id=run_id, actor_id="sales_a", inquiry=inquiry, status="running",
             execution_mode="demo", result={}, idempotency_key="recovery-key",
-            request_hash=sha256(inquiry.encode("utf-8")).hexdigest(), attempt=1,
+            request_hash=request_hash("C-001", inquiry), attempt=1,
             lease_expires_at=datetime.now(timezone.utc) - timedelta(seconds=1),
         ))
         db.commit()
@@ -216,7 +225,7 @@ def test_only_one_request_can_reclaim_an_expired_run_lease(client, monkeypatch):
         db.add(RunRecord(
             id="contended-run", actor_id="sales_a", inquiry=inquiry, status="running",
             execution_mode="demo", result={}, idempotency_key="contended-key",
-            request_hash=sha256(inquiry.encode("utf-8")).hexdigest(), attempt=1,
+            request_hash=request_hash("C-001", inquiry), attempt=1,
             lease_expires_at=datetime.now(timezone.utc) - timedelta(seconds=1),
         ))
         db.commit()
@@ -321,6 +330,29 @@ def test_quote_update_revalidates_active_policy(client):
     assert owned["policy_version"] == "v1"
 
 
+def test_quote_update_rejects_expired_active_policy(client):
+    result = client.post("/api/v1/runs", json={"inquiry": "Quote 100 units of Product A with 5% discount."}).json()
+    quote_id = result["quote"]["id"]
+    with client.app.state.session_factory() as db:
+        policy = db.query(Policy).filter_by(policy_id="DISCOUNT-01", version="v1").one()
+        policy.effective_to = datetime.now(timezone.utc) - timedelta(seconds=1)
+        db.commit()
+    response = client.patch(f"/api/v1/quotes/{quote_id}", json={"requested_discount_pct": 4})
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "CURRENT_CONTEXT_UNAVAILABLE"
+    owned = client.get(f"/api/v1/quotes/{quote_id}").json()
+    assert owned["breakdown"]["discount_pct"] == "5.00"
+
+
+def test_quote_response_preserves_product_currency(client):
+    with client.app.state.session_factory() as db:
+        db.add(Product(id="P-300", name="Euro Product", currency="EUR", unit_price=Decimal("20.00"), stock=100))
+        db.commit()
+    result = client.post("/api/v1/runs", json={"inquiry": "Quote P-300 10 units with 5% discount."}).json()
+    assert result["decision"]["decision"] == "ALLOW", result
+    assert result["quote"]["breakdown"]["currency"] == "EUR"
+
+
 def test_inactive_policy_fails_closed(client):
     with client.app.state.session_factory() as db:
         for policy in db.scalars(select(Policy)):
@@ -347,10 +379,7 @@ def test_expired_active_policy_is_not_retrieved(client):
 
 def test_single_policy_candidate_uses_registry_without_embedding(client, monkeypatch):
     from app.agents import workflow
-    from app.core.config import settings
 
-    monkeypatch.setattr(settings, "llm_api_key", "configured-test-key")
-    monkeypatch.setattr(settings, "embedding_model", "test-embedding")
     monkeypatch.setattr("langchain_openai.OpenAIEmbeddings", lambda **_kwargs: pytest.fail("Embedding must not run for one candidate"))
     with client.app.state.session_factory() as db:
         customer = db.get(Customer, "C-001")
@@ -394,7 +423,6 @@ def test_invalid_structured_llm_output_fails_closed_without_quote(client, monkey
 
     monkeypatch.setattr(settings, "llm_api_key", "test-key")
     monkeypatch.setattr(settings, "llm_model", "test-model")
-    monkeypatch.setattr(settings, "local_embedding_model_path", "")
     monkeypatch.setattr("langchain_openai.ChatOpenAI", InvalidStructuredChat)
 
     result = client.post(
@@ -403,7 +431,7 @@ def test_invalid_structured_llm_output_fails_closed_without_quote(client, monkey
     ).json()
 
     assert result["status"] == "failed"
-    assert result["decision"]["reason_code"] == "WORKFLOW_FAILED"
+    assert result["decision"]["reason_code"] == "LLM_INVALID_OUTPUT"
     assert result["quote"] is None
     assert count_quotes(client) == 0
 
@@ -436,7 +464,6 @@ def test_invalid_llm_values_become_missing_and_never_create_quote(client, monkey
 
     monkeypatch.setattr(settings, "llm_api_key", "test-key")
     monkeypatch.setattr(settings, "llm_model", "test-model")
-    monkeypatch.setattr(settings, "local_embedding_model_path", "")
     monkeypatch.setattr("langchain_openai.ChatOpenAI", InvalidFieldChat)
 
     result = client.post(
@@ -470,7 +497,6 @@ def test_invalid_single_item_preserves_safe_fields_for_follow_up(client, monkeyp
 
     monkeypatch.setattr(settings, "llm_api_key", "test-key")
     monkeypatch.setattr(settings, "llm_model", "test-model")
-    monkeypatch.setattr(settings, "local_embedding_model_path", "")
     monkeypatch.setattr("langchain_openai.ChatOpenAI", InvalidSingleItemChat)
 
     result = client.post(
@@ -532,14 +558,14 @@ def test_manager_approval_is_revalidated_idempotent_and_traced(client):
 def test_concurrent_manager_approval_creates_one_quote(client, monkeypatch):
     approval_id = _review_request(client)
     barrier = Barrier(2)
-    original = approval_services.evaluate_quote
+    original = approval_services.evaluate_quote_with_trace
 
     def synchronized_evaluation(*args, **kwargs):
         outcome = original(*args, **kwargs)
         barrier.wait(timeout=5)
         return outcome
 
-    monkeypatch.setattr(approval_services, "evaluate_quote", synchronized_evaluation)
+    monkeypatch.setattr(approval_services, "evaluate_quote_with_trace", synchronized_evaluation)
 
     def approve():
         return client.post(f"/api/v1/approvals/{approval_id}/approve", headers={"X-Demo-Actor": "manager"})

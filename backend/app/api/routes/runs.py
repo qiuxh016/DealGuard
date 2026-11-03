@@ -139,7 +139,7 @@ def create_run(
         raise HTTPException(status_code=422, detail={"code": "CUSTOMER_REQUIRED", "message": "Select a customer before running an inquiry."})
     if actor.customer_id and customer_id != actor.customer_id:
         raise HTTPException(status_code=403, detail={"code": "RESOURCE_NOT_OWNED", "message": "This account cannot quote for the selected customer."})
-    request_hash = sha256(f"{customer_id}\\0{body.inquiry}".encode("utf-8")).hexdigest()
+    request_hash = sha256(f"{customer_id}\0{body.inquiry}".encode("utf-8")).hexdigest()
     if idempotency_key is not None:
         idempotency_key = idempotency_key.strip()
         if not idempotency_key:
