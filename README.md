@@ -52,7 +52,7 @@ npm install
 npm run dev
 ```
 
-打开 <http://localhost:3000>。前端默认连接 `http://localhost:8000`。
+打开 <http://localhost:3001>。前端默认连接 `http://localhost:8000`。
 
 如需接入模型，可将 `.env.example` 复制为项目根目录下的 `.env`，再配置 DeepSeek API。询盘解析使用 OpenAI-compatible 模型。政策候选始终先由 Registry 按租户、客户等级、政策状态、生效时间和业务范围过滤；可选配置 `LOCAL_EMBEDDING_MODEL_PATH` 指向本机 Qwen3-Embedding-0.6B 权重目录，启用 BM25 + Dense 条款检索。多个合格政策时，只有 BM25 与 Dense 的首选政策一致才继续；未配置或检索分歧时安全弃权。
 

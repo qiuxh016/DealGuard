@@ -14,7 +14,7 @@ from app.schemas.deal import ActionProposal, ApprovalOutcome, ApprovalRequestRes
 from app.services.quotes import quote_response
 from app.services.permissions import has_capability
 from app.services.policies import current_quote_policies
-from app.services.inventory import aggregate_inventory_failure
+from app.services.inventory import order_constraint_failure
 
 
 def _manager(actor: DemoActor) -> None:
@@ -135,12 +135,12 @@ def process_approval(db: Session, actor: DemoActor, approval_id: str, approve: b
                 provenance = quote_provenance(current, decision, guard_checks, saved.get("policy_provenance", {}).get("citation"), saved.get("policy_provenance", {}).get("citation_ref"), saved.get("policy_provenance", {}).get("chunk_id"))
                 current_lines.append({"product_id": product.id, "product_name": product.name, "currency": product.currency, "quantity": proposal.quantity, "unit_price": str(product.unit_price), "discount_pct": str(proposal.requested_discount_pct), "subtotal": str(breakdown.subtotal), "discount_amount": str(breakdown.discount_amount), "total": str(breakdown.total), "policy_id": current.policy_id, "policy_version": current.version, "policy_source": current.source, "policy_scope": current.policy_scope, "available_stock": product.stock, "inventory_checked_at": now.isoformat(), **provenance})
         if not stale_code:
-            inventory_failure = aggregate_inventory_failure(
-                (line["product_id"], line["quantity"], line["available_stock"])
+            constraint_failure = order_constraint_failure(
+                (line["product_id"], line["currency"], line["quantity"], line["available_stock"])
                 for line in current_lines
             )
-            if inventory_failure:
-                stale_code = "INSUFFICIENT_STOCK"
+            if constraint_failure:
+                stale_code = constraint_failure[0]
         if stale_code:
             if not _transition_pending(db, row, "STALE", actor.id, stale_code):
                 return _approval_conflict(db, approval_id, approve)

@@ -141,6 +141,27 @@ def test_login_rate_limit_is_configurable_per_client_ip(client, monkeypatch):
     assert int(limited.headers["Retry-After"]) > 0
 
 
+def test_registration_rate_limit_has_independent_configuration(client, monkeypatch):
+    from app.api.routes import auth as auth_route
+
+    monkeypatch.setattr(auth_route, "_registration_attempts", {})
+    monkeypatch.setattr(settings, "auth_login_max_attempts", 1)
+    monkeypatch.setattr(settings, "auth_register_max_attempts", 2)
+    monkeypatch.setattr(settings, "auth_login_window_seconds", 60)
+    for index in range(2):
+        response = client.post("/api/v1/auth/register", json={
+            "organization_name": f"Workspace {index}", "display_name": "Workspace Admin",
+            "email": f"workspace-{index}@example.test", "password": "a-secure-password-123",
+        })
+        assert response.status_code == 201, response.text
+    limited = client.post("/api/v1/auth/register", json={
+        "organization_name": "Workspace 3", "display_name": "Workspace Admin",
+        "email": "workspace-3@example.test", "password": "a-secure-password-123",
+    })
+    assert limited.status_code == 429
+    assert limited.json()["detail"]["code"] == "REGISTRATION_RATE_LIMITED"
+
+
 def test_production_rejects_demo_actor_header(client, monkeypatch):
     monkeypatch.setattr(settings, "app_env", "production")
     assert client.get("/api/v1/policies", headers={"X-Demo-Actor": "admin"}).status_code == 401

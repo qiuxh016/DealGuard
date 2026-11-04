@@ -3,11 +3,13 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import "../history.css";
 import { WorkspaceNav } from "../../components/WorkspaceNav";
+import { useLanguage } from "../../components/LanguageProvider";
 
 type AuditEvent = { id: string; actor_id: string; action: string; outcome: string; reason_code: string | null; policy_id: string | null; version: string | null; created_at: string };
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
 export default function AuditPage() {
+  const { locale, t } = useLanguage();
   const [actor, setActor] = useState("");
   const [rows, setRows] = useState<AuditEvent[]>([]);
   const [action, setAction] = useState("");
@@ -52,20 +54,20 @@ export default function AuditPage() {
   }, [actor, headers]);
 
   return <><WorkspaceNav /><main className="dg-history"><div className="dg-history-main">
-    <header className="dg-history-head"><div><h1>政策管理审计</h1><p>记录政策草稿上传、规则编辑、激活及拒绝事件，不展示政策正文。</p></div></header>
+    <header className="dg-history-head"><div><h1>{t("政策管理审计", "Policy audit")}</h1><p>{t("记录政策草稿上传、规则编辑、激活及拒绝事件，不展示政策正文。", "Review policy draft uploads, rule edits, activations, and denied actions. Policy text is not shown here.")}</p></div></header>
     <section className="dg-history-panel" style={{ marginTop: 12 }}>
       <form className="dg-history-filters" onSubmit={(event) => void loadAudit(event)}>
-        <label>动作<input placeholder="全部动作" value={action} onChange={(event) => setAction(event.target.value)} /></label>
-        <label>结果<select value={outcome} onChange={(event) => setOutcome(event.target.value)}><option value="">全部</option><option value="SUCCESS">成功</option><option value="DENIED">拒绝</option></select></label>
-        <label>政策编号<input placeholder="例如 DISCOUNT-02" value={policyId} onChange={(event) => setPolicyId(event.target.value)} /></label>
-        <label>开始时间<input type="datetime-local" value={createdFrom} onChange={(event) => setCreatedFrom(event.target.value)} /></label>
-        <label>结束时间<input type="datetime-local" value={createdTo} onChange={(event) => setCreatedTo(event.target.value)} /></label>
-        <button className="dg-history-button" disabled={busy}>{busy ? "读取中…" : "筛选"}</button>
+        <label>{t("动作", "Action")}<input placeholder={t("全部动作", "All actions")} value={action} onChange={(event) => setAction(event.target.value)} /></label>
+        <label>{t("结果", "Outcome")}<select value={outcome} onChange={(event) => setOutcome(event.target.value)}><option value="">{t("全部", "All")}</option><option value="SUCCESS">{t("成功", "Success")}</option><option value="DENIED">{t("拒绝", "Denied")}</option></select></label>
+        <label>{t("政策编号", "Policy ID")}<input placeholder={t("例如 DISCOUNT-02", "e.g. DISCOUNT-02")} value={policyId} onChange={(event) => setPolicyId(event.target.value)} /></label>
+        <label>{t("开始时间", "From")}<input type="datetime-local" value={createdFrom} onChange={(event) => setCreatedFrom(event.target.value)} /></label>
+        <label>{t("结束时间", "To")}<input type="datetime-local" value={createdTo} onChange={(event) => setCreatedTo(event.target.value)} /></label>
+        <button className="dg-history-button" disabled={busy}>{busy ? t("读取中…", "Loading…") : t("筛选", "Filter")}</button>
       </form>
       {notice && <p className="dg-history-notice" role="status">{notice}</p>}
-      <div className="dg-history-table-wrap"><table className="dg-history-table"><thead><tr><th>时间</th><th>操作者</th><th>动作</th><th>结果</th><th>原因码</th><th>政策版本</th></tr></thead><tbody>
-        {rows.map((row) => <tr key={row.id}><td>{new Date(row.created_at).toLocaleString()}</td><td>{row.actor_id}</td><td>{row.action}</td><td>{row.outcome}</td><td>{row.reason_code ?? "—"}</td><td>{row.policy_id ? `${row.policy_id}@${row.version ?? "—"}` : "—"}</td></tr>)}
-      </tbody></table>{rows.length === 0 && <div className="dg-history-empty">没有匹配的政策审计记录。此页面仅管理员可读。</div>}</div>
+      <div className="dg-history-table-wrap"><table className="dg-history-table"><thead><tr><th>{t("时间", "Time")}</th><th>{t("操作者", "Actor")}</th><th>{t("动作", "Action")}</th><th>{t("结果", "Outcome")}</th><th>{t("原因码", "Reason code")}</th><th>{t("政策版本", "Policy version")}</th></tr></thead><tbody>
+        {rows.map((row) => <tr key={row.id}><td>{new Date(row.created_at).toLocaleString(locale === "zh" ? "zh-CN" : "en-US")}</td><td>{row.actor_id}</td><td>{row.action}</td><td>{row.outcome === "SUCCESS" ? t("成功", "Success") : row.outcome === "DENIED" ? t("拒绝", "Denied") : row.outcome}</td><td>{row.reason_code ?? "—"}</td><td>{row.policy_id ? `${row.policy_id}@${row.version ?? "—"}` : "—"}</td></tr>)}
+      </tbody></table>{rows.length === 0 && <div className="dg-history-empty">{t("没有匹配的政策审计记录。此页面仅管理员可读。", "No matching audit events. This page is available to administrators only.")}</div>}</div>
     </section>
   </div></main></>;
 }

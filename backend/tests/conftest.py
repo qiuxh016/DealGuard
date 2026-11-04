@@ -14,6 +14,7 @@ def isolate_auth_rate_limit(monkeypatch):
     from app.api.routes import auth
 
     monkeypatch.setattr(auth, "_login_failures", {})
+    monkeypatch.setattr(auth, "_registration_attempts", {})
 
 
 @pytest.fixture

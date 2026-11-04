@@ -21,6 +21,10 @@ button, select, textarea { font: inherit; }
 .dg-workspace-links a[aria-current="page"] { border-bottom-color: #2864e8; }
 .dg-workspace-session { display: flex; flex: 0 0 auto; align-items: center; gap: 12px; color: #66758e; font-size: 12px; }
 .dg-workspace-session > span { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dg-language-toggle { display: inline-flex; align-items: center; gap: 5px; color: #66758e; font-size: 11px; white-space: nowrap; }
+.dg-language-toggle select { min-height: 34px; border: 1px solid #d7e0eb; border-radius: 7px; background: #fff; color: #33445d; padding: 0 7px; font: inherit; cursor: pointer; }
+.dg-login-language { display: flex; justify-content: flex-end; margin: -8px 0 20px; }
+.dg-login-language .dg-language-toggle { color: #52657c; }
 .dg-workspace-session button { min-height: 36px; border: 1px solid #cbd9de; border-radius: 8px; background: #fff; color: #15233b; padding: 0 12px; font-size: 12px; font-weight: 650; cursor: pointer; white-space: nowrap; }
 .dg-workspace-session button:hover { border-color: #3659d9; background: #f5f7ff; }
 @media (max-width: 1000px) {

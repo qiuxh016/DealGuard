@@ -126,6 +126,33 @@ def test_policy_rule_extraction_requires_model_and_human_confirmed_draft_is_not_
         assert db.query(Policy).filter_by(policy_id="CONFIRMED").count() == 0
 
 
+def test_policy_version_is_unique_across_registered_policies_and_drafts(client):
+    duplicate_registered = client.post("/api/v1/policy-drafts/confirmed", headers=ADMIN, json={
+        "policy_id": "DISCOUNT-01", "version": "v1", "title": "Duplicate seed policy",
+        "source": "Duplicate", "action_type": "quote_discount", "policy_scope": "general",
+        "scope_product_id": None, "customer_tier": "VIP", "max_discount_pct": 5,
+        "review_max_discount_pct": None, "exception_approval_allowed": False,
+    })
+    assert duplicate_registered.status_code == 409
+    assert duplicate_registered.json()["detail"]["code"] == "POLICY_VERSION_EXISTS"
+
+    created = client.post("/api/v1/policy-drafts/confirmed", headers=ADMIN, json={
+        "policy_id": "UNIQUE-TEST", "version": "v1", "title": "Unique test policy",
+        "source": "VIP discount limit is 5 percent.", "action_type": "quote_discount",
+        "policy_scope": "general", "scope_product_id": None, "customer_tier": "VIP",
+        "max_discount_pct": 5, "review_max_discount_pct": None, "exception_approval_allowed": False,
+    })
+    assert created.status_code == 201, created.text
+    duplicate_draft = client.post("/api/v1/policy-drafts/confirmed", headers=ADMIN, json={
+        "policy_id": "UNIQUE-TEST", "version": "v1", "title": "Duplicate draft",
+        "source": "Duplicate", "action_type": "quote_discount", "policy_scope": "general",
+        "scope_product_id": None, "customer_tier": "VIP", "max_discount_pct": 5,
+        "review_max_discount_pct": None, "exception_approval_allowed": False,
+    })
+    assert duplicate_draft.status_code == 409
+    assert duplicate_draft.json()["detail"]["code"] == "POLICY_VERSION_EXISTS"
+
+
 def test_extractor_filters_non_source_citations_and_marks_missing_required_fields(monkeypatch):
     monkeypatch.setattr(settings, "llm_api_key", "configured-key")
     monkeypatch.setattr(settings, "llm_model", "configured-model")

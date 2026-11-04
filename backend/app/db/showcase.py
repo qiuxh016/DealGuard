@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-import secrets
 
 from sqlalchemy import select
 
@@ -27,6 +26,7 @@ from app.services.actors import hash_password
 
 TENANT_ID = "dealguard-showcase-workspace"
 DEFAULT_EMAIL = "demo@dealguard.local"
+SHOWCASE_PASSWORD = "DealGuard-Showcase-2026!"
 ADMIN_ID = "dealguard-showcase-admin"
 CUSTOMERS = (
     ("DG-C-001", "HarborLight VIP Retail", "VIP"),
@@ -134,7 +134,7 @@ def _seed_run_history(db, sales_runners: dict[str, DemoActor]) -> None:
         settings.llm_api_key, settings.llm_model, settings.local_embedding_model_path = original
 
 
-def create_showcase_account(email: str = DEFAULT_EMAIL, password: str | None = None) -> tuple[str, str, bool]:
+def create_showcase_account(email: str = DEFAULT_EMAIL) -> tuple[str, str, bool]:
     if settings.app_env == "production":
         raise RuntimeError("Showcase account provisioning is disabled in APP_ENV=production.")
     email = email.strip().lower()
@@ -146,14 +146,13 @@ def create_showcase_account(email: str = DEFAULT_EMAIL, password: str | None = N
         if account is not None:
             actor = db.get(DemoActor, account.actor_id)
             if actor and actor.tenant_id == TENANT_ID:
-                return email, "", False
+                account.password_hash = hash_password(SHOWCASE_PASSWORD)
+                db.commit()
+                return email, SHOWCASE_PASSWORD, False
             raise RuntimeError(f"{email} already belongs to another workspace; no data was changed.")
         if db.get(Tenant, TENANT_ID) is not None:
             raise RuntimeError(f"Showcase workspace {TENANT_ID} already exists; no data was changed.")
 
-        initial_password = password or secrets.token_urlsafe(20)
-        if len(initial_password) < 12:
-            raise ValueError("Password must contain at least 12 characters.")
         actor = DemoActor(id=ADMIN_ID, display_name="DealGuard Showcase Admin", role="admin", customer_id=None, tenant_id=TENANT_ID)
         try:
             sales_runners = {
@@ -161,13 +160,13 @@ def create_showcase_account(email: str = DEFAULT_EMAIL, password: str | None = N
                 for index, (customer_id, _, _) in enumerate(CUSTOMERS, start=1)
             }
             _seed_business_data(db, actor, list(sales_runners.values()))
-            db.add(AuthAccount(actor_id=actor.id, email=email, password_hash=hash_password(initial_password), is_active=True))
+            db.add(AuthAccount(actor_id=actor.id, email=email, password_hash=hash_password(SHOWCASE_PASSWORD), is_active=True))
             db.commit()
         except Exception:
             db.rollback()
             raise
         _seed_run_history(db, sales_runners)
-        return email, initial_password, True
+        return email, SHOWCASE_PASSWORD, True
 
 
 def main() -> None:
@@ -179,11 +178,10 @@ def main() -> None:
     email, password, created = create_showcase_account(arguments.email)
     if created:
         print("Showcase workspace created in the configured database.")
-        print(f"Email: {email}")
-        print(f"Initial password (shown once): {password}")
-        print("Sign in and change the password on the Account page. Keep the password private.")
     else:
-        print(f"Showcase account {email} already exists; no data or password was changed.")
+        print("Showcase account password reset; workspace data was preserved.")
+    print(f"Email: {email}")
+    print(f"Password: {password}")
 
 
 if __name__ == "__main__":

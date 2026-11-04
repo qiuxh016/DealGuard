@@ -15,10 +15,11 @@ from app.schemas.deal import ActionProposal, GuardDecision, InquiryIntent, Metri
 from app.db.models import PolicyAuditEvent, RunRecord
 from app.services.actors import get_current_actor
 from app.services.permissions import has_capability, require_capability
-from app.services.inventory import aggregate_inventory_failure
+from app.services.inventory import order_constraint_failure
 from app.services.policy_audit import add_policy_audit_event
 from app.services.policy_extraction import extract_policy_rules
 from app.services.policy_import import MAX_POLICY_IMPORT_BYTES, PolicyImportError, parse_policy_import, policy_import_template, public_policy_import_preview
+from app.services.policy_versions import reserve_policy_version
 from app.services.policies import activate_policy
 
 router = APIRouter(tags=["policy governance", "metrics"])
@@ -79,6 +80,14 @@ def _deny_policy_action(db: Session, actor: DemoActor, action: str, code: str, m
     raise HTTPException(status_code=status_code, detail={"code": code, "message": message})
 
 
+def _reserve_policy_version(db: Session, actor: DemoActor, policy_id: str, version: str):
+    if not reserve_policy_version(db, actor.tenant_id, policy_id, version):
+        raise HTTPException(status_code=409, detail={
+            "code": "POLICY_VERSION_EXISTS",
+            "message": "This policy ID and version already exist in this workspace.",
+        })
+
+
 @router.post("/policy-drafts", response_model=PolicyDraftResponse)
 async def upload_policy_draft(policy_id: str = Form(min_length=1, max_length=80), version: str = Form(min_length=1, max_length=40),
         file: UploadFile = File(...), actor: DemoActor = Depends(get_current_actor), db: Session = Depends(get_db)):
@@ -97,7 +106,8 @@ async def upload_policy_draft(policy_id: str = Form(min_length=1, max_length=80)
         source = content.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise HTTPException(status_code=422, detail={"code": "INVALID_POLICY_ENCODING", "message": "Policy source must use UTF-8."}) from exc
-    row = PolicyDraft(policy_id=policy_id.strip(), version=version.strip(), source=source, uploaded_by=actor.id, tenant_id=actor.tenant_id)
+    _reserve_policy_version(db, actor, policy_id, version)
+    row = PolicyDraft(policy_id=policy_id, version=version, source=source, uploaded_by=actor.id, tenant_id=actor.tenant_id)
     db.add(row)
     add_policy_audit_event(db, actor, "policy_draft_uploaded", "SUCCESS", policy_id=policy_id, version=version)
     db.commit()
@@ -157,6 +167,7 @@ async def extract_policy_draft_rules(
 @router.post("/policy-drafts/confirmed", response_model=PolicyDraftResponse, status_code=201)
 def create_confirmed_policy_draft(body: PolicyDraftCreate, actor: DemoActor = Depends(get_current_actor), db: Session = Depends(get_db)):
     _admin(actor, db, "policy_draft_confirmed", body.policy_id, body.version)
+    _reserve_policy_version(db, actor, body.policy_id, body.version)
     if body.policy_scope == "product_specific" and db.scalar(select(Product.id).where(
         Product.id == body.scope_product_id, Product.tenant_id == actor.tenant_id,
     )) is None:
@@ -234,6 +245,9 @@ async def import_policy_drafts(file: UploadFile = File(...), actor: DemoActor = 
             "code": "POLICY_IMPORT_VALIDATION_FAILED", "message": "发现无效或重复行；整批没有导入。请修正文件后重新预览。",
             "preview": {"filename": file.filename, **preview},
         })
+    for row in rows:
+        draft_data = row["draft"]
+        _reserve_policy_version(db, actor, draft_data["policy_id"], draft_data["version"])
     drafts = [PolicyDraft(**row["draft"], uploaded_by=actor.id, tenant_id=actor.tenant_id) for row in rows]
     db.add_all(drafts)
     for row in rows:
@@ -360,22 +374,16 @@ def compare_policies(body: PolicyDiffRequest, actor: DemoActor = Depends(get_cur
                 (item["product_id"] if isinstance(item, dict) else item.product_id) in products_by_id
                 for item in requested_items
             )
-            currencies = {
-                products_by_id[item["product_id"] if isinstance(item, dict) else item.product_id].currency
-                for item in requested_items
-                if (item["product_id"] if isinstance(item, dict) else item.product_id) in products_by_id
-            }
-            mixed_currency = all_products_found and len(currencies) > 1
             quantities_complete = all((item["quantity"] if isinstance(item, dict) else item.quantity) is not None for item in requested_items)
-            inventory_failure = None
+            constraint_failure = None
             if all_products_found and quantities_complete:
-                inventory_failure = aggregate_inventory_failure(
+                constraint_failure = order_constraint_failure(
                     (
                         item["product_id"] if isinstance(item, dict) else item.product_id,
+                        products_by_id[item["product_id"] if isinstance(item, dict) else item.product_id].currency,
                         item["quantity"] if isinstance(item, dict) else item.quantity,
                         products_by_id[item["product_id"] if isinstance(item, dict) else item.product_id].stock,
-                    )
-                    for item in requested_items
+                    ) for item in requested_items
                 )
             lines = []
             for item in requested_items:
@@ -383,12 +391,12 @@ def compare_policies(body: PolicyDiffRequest, actor: DemoActor = Depends(get_cur
                 quantity = item["quantity"] if isinstance(item, dict) else item.quantity
                 discount = item["requested_discount_pct"] if isinstance(item, dict) else item.requested_discount_pct
                 product = products_by_id.get(product_id)
-                if mixed_currency:
-                    line_decision = GuardDecision(decision="DENY", reason_code="MIXED_CURRENCY_UNSUPPORTED", policy_id=policy.policy_id,
+                if constraint_failure and constraint_failure[0] == "MIXED_CURRENCY_UNSUPPORTED":
+                    line_decision = GuardDecision(decision="DENY", reason_code=constraint_failure[0], policy_id=policy.policy_id,
                                                   policy_version=policy.version, human_message="All items in one quote must use the same currency.")
                     line_breakdown = None
-                elif inventory_failure and product_id == inventory_failure[0]:
-                    line_decision = GuardDecision(decision="DENY", reason_code="INSUFFICIENT_STOCK", policy_id=policy.policy_id,
+                elif constraint_failure and constraint_failure[0] == "INSUFFICIENT_STOCK" and product_id == constraint_failure[1]:
+                    line_decision = GuardDecision(decision="DENY", reason_code=constraint_failure[0], policy_id=policy.policy_id,
                                                   policy_version=policy.version, human_message="The combined requested quantity exceeds current stock.")
                     line_breakdown = None
                 elif product is None:

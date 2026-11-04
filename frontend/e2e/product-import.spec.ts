@@ -8,7 +8,10 @@ async function registerAdmin(page: Page) {
   await page.getByLabel("管理员姓名").fill("Workspace Owner");
   await page.getByLabel("邮箱").fill(`import-${suffix}@dealguard.test`);
   await page.getByLabel("密码").fill("secure-import-password-123");
+  const registration = page.waitForResponse((response) => response.url().endsWith("/api/v1/auth/register") && response.request().method() === "POST");
   await page.getByRole("button", { name: "创建工作区", exact: true }).last().click();
+  const response = await registration;
+  expect(response.status(), `Registration failed: ${response.status()} ${await response.text()}`).toBe(201);
   await expect(page.getByRole("heading", { name: "询盘与报价工作台" })).toBeVisible();
 }
 

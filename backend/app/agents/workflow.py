@@ -14,7 +14,7 @@ from app.db.models import Customer, DemoActor, Policy, Product, QuoteDraft
 from app.guards.business_rules import evaluate_quote_with_trace
 from app.schemas.deal import ActionProposal, InquiryIntent, PolicyEvidence, QuoteItemIntent, TraceEvent
 from app.rag.provenance import quote_provenance
-from app.services.inventory import aggregate_inventory_failure
+from app.services.inventory import order_constraint_failure
 
 
 class WorkflowStepFailure(RuntimeError):
@@ -479,19 +479,21 @@ def _validate(state: DealGuardState) -> dict[str, Any]:
         if customer is None or len(products) != len(intent.items):
             decision = {"decision": "DENY", "reason_code": "BUSINESS_DATA_NOT_FOUND", "policy_id": None, "policy_version": None, "human_message": "One or more requested products were not found in trusted business data."}
             return {"decision": decision, "breakdown": None, "status": "completed", "events": state.get("events", []) + [_event("validate_proposal", "denied", decision["human_message"])]}
-        if len({product.currency for product in products}) > 1:
-            decision = {"decision": "DENY", "reason_code": "MIXED_CURRENCY_UNSUPPORTED", "policy_id": None, "policy_version": None, "human_message": "All items in one quote must use the same currency."}
-            return {"decision": decision, "breakdown": None, "status": "completed", "events": state.get("events", []) + [_event("validate_proposal", "denied", decision["human_message"], {"reason_code": decision["reason_code"]})]}
-        inventory_failure = aggregate_inventory_failure(
-            (item.product_id, item.quantity, product.stock)
+        constraint_failure = order_constraint_failure(
+            (item.product_id, product.currency, item.quantity, product.stock)
             for item, product in zip(intent.items, products, strict=True)
         )
-        if inventory_failure:
-            product_id, requested_quantity, available_stock = inventory_failure
-            decision = {"decision": "DENY", "reason_code": "INSUFFICIENT_STOCK", "policy_id": policy.policy_id if policy else None,
+        if constraint_failure:
+            reason_code, product_id, requested_quantity, available_stock = constraint_failure
+            message = ("All items in one quote must use the same currency." if reason_code == "MIXED_CURRENCY_UNSUPPORTED"
+                       else f"Requested quantity {requested_quantity} for {product_id} exceeds the {available_stock} units currently available.")
+            decision = {"decision": "DENY", "reason_code": reason_code, "policy_id": policy.policy_id if policy else None,
                         "policy_version": policy.version if policy else None,
-                        "human_message": f"Requested quantity {requested_quantity} for {product_id} exceeds the {available_stock} units currently available."}
-            return {"decision": decision, "breakdown": None, "status": "completed", "events": state.get("events", []) + [_event("validate_proposal", "denied", decision["human_message"], {"reason_code": decision["reason_code"], "product_id": product_id, "requested_quantity": requested_quantity, "available_stock": available_stock})]}
+                        "human_message": message}
+            details = {"reason_code": reason_code}
+            if product_id is not None:
+                details.update({"product_id": product_id, "requested_quantity": requested_quantity, "available_stock": available_stock})
+            return {"decision": decision, "breakdown": None, "status": "completed", "events": state.get("events", []) + [_event("validate_proposal", "denied", message, details)]}
         line_results, decisions = [], []
         for item, product in zip(intent.items, products):
             proposal = ActionProposal(customer_id=customer.id, product_id=product.id, quantity=item.quantity, requested_discount_pct=item.requested_discount_pct)

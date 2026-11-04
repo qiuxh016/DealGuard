@@ -3,12 +3,14 @@
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { WorkspaceNav } from "../../components/WorkspaceNav";
+import { ImageField } from "../../components/ImageField";
+import { useLanguage } from "../../components/LanguageProvider";
 import "../workspace.css";
 import "../operations.css";
 import "./account.css";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
-type Profile = { actor_id: string; display_name: string; role: string; tenant_id: string; email: string | null; workspace_name: string | null };
+type Profile = { actor_id: string; display_name: string; role: string; tenant_id: string; email: string | null; workspace_name: string | null; image_id: string | null };
 type Customer = { id: string; name: string; tier: string };
 type Member = { actor_id: string; display_name: string; email: string; role: string; customer_id: string | null; is_active: boolean };
 type Invitation = { id: string; email: string; role: string; customer_id: string | null; expires_at: string; expired: boolean };
@@ -24,9 +26,9 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return payload;
 }
 
-const roleName = (role: string) => role === "admin" ? "管理员" : role === "manager" ? "经理" : "销售";
-
 export default function AccountPage() {
+  const { t } = useLanguage();
+  const roleName = (role: string) => role === "admin" ? t("管理员", "Administrator") : role === "manager" ? t("经理", "Manager") : t("销售", "Sales");
   const [profile, setProfile] = useState<Profile | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -132,47 +134,48 @@ export default function AccountPage() {
   return <div className="dg-operations">
     <WorkspaceNav role={profile?.role} />
     <main className="dg-operations-main dg-account-main">
-      <header className="dg-operations-head"><div><h1>账户与团队</h1><p>维护个人资料与登录凭据；管理员可在此管理工作区成员和邀请。</p></div></header>
-      {notice && <div className="dg-operations-notice" role="status">{notice}{notice.startsWith("Sign in") && <> <Link href="/">返回登录</Link></>}</div>}
-      {!profile ? <section className="dg-operations-panel dg-account-loading">正在读取账户信息…</section> : <>
+      <header className="dg-operations-head"><div><h1>{t("账户与团队", "Account and team")}</h1><p>{t("维护个人资料与登录凭据；管理员可在此管理工作区成员和邀请。", "Manage your profile and credentials. Administrators can manage workspace members and invitations here.")}</p></div></header>
+      {notice && <div className="dg-operations-notice" role="status">{notice}{notice.startsWith("Sign in") && <> <Link href="/">{t("返回登录", "Back to sign in")}</Link></>}</div>}
+      {!profile ? <section className="dg-operations-panel dg-account-loading">{t("正在读取账户信息…", "Loading account…")}</section> : <>
         <div className="dg-account-grid">
           <section className="dg-operations-panel dg-account-panel">
-            <div className="dg-account-panel-head"><div><h2>个人资料</h2><p>当前工作区的身份信息</p></div></div>
+            <div className="dg-account-panel-head"><div><h2>{t("个人资料", "Profile")}</h2><p>{t("当前工作区的身份信息", "Identity in this workspace")}</p></div></div>
             <form className="dg-account-form" onSubmit={saveProfile}>
-              <label>姓名<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} minLength={2} maxLength={120} required /></label>
-              <label>邮箱<input value={profile.email ?? "未设置"} readOnly aria-describedby="account-email-note" /></label>
-              <small id="account-email-note">邮箱暂不支持直接修改；如需更换，请联系工作区管理员。</small>
-              <div className="dg-account-facts"><span>角色</span><strong>{roleName(profile.role)}</strong><span>工作区</span><strong>{profile.workspace_name ?? "—"}</strong></div>
-              <button className="dg-operations-primary" disabled={busy}>{busy ? "正在保存…" : "保存资料"}</button>
+              <div className="dg-account-image-field"><ImageField imageId={profile.image_id ?? null} alt={t("账户头像", "Account avatar")} label={t("设置头像", "Set avatar")} uploadPath="/api/v1/auth/me/image" removePath="/api/v1/auth/me/image" onChange={(imageId) => { setProfile((current) => current ? { ...current, image_id: imageId } : current); window.dispatchEvent(new CustomEvent("dealguard-profile-avatar", { detail: imageId })); }} /></div>
+              <label>{t("姓名", "Name")}<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} minLength={2} maxLength={120} required /></label>
+              <label>{t("邮箱", "Email")}<input value={profile.email ?? t("未设置", "Not set")} readOnly aria-describedby="account-email-note" /></label>
+              <small id="account-email-note">{t("邮箱暂不支持直接修改；如需更换，请联系工作区管理员。", "Email cannot be changed here. Contact your workspace administrator to update it.")}</small>
+              <div className="dg-account-facts"><span>{t("角色", "Role")}</span><strong>{roleName(profile.role)}</strong><span>{t("工作区", "Workspace")}</span><strong>{profile.workspace_name ?? "—"}</strong></div>
+              <button className="dg-operations-primary" disabled={busy}>{busy ? t("正在保存…", "Saving…") : t("保存资料", "Save profile")}</button>
             </form>
           </section>
           <section className="dg-operations-panel dg-account-panel">
-            <div className="dg-account-panel-head"><div><h2>修改密码</h2><p>新密码至少 12 个字符</p></div></div>
+            <div className="dg-account-panel-head"><div><h2>{t("修改密码", "Change password")}</h2><p>{t("新密码至少 12 个字符", "New password must be at least 12 characters")}</p></div></div>
             <form className="dg-account-form" onSubmit={changePassword}>
-              <label>当前密码<input type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} autoComplete="current-password" required /></label>
-              <label>新密码<input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} minLength={12} maxLength={1024} autoComplete="new-password" required /></label>
-              <label>确认新密码<input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} minLength={12} maxLength={1024} autoComplete="new-password" required /></label>
-              <p className="dg-account-security-note">修改成功后，其他设备上的登录会话将退出。</p>
-              <button className="dg-operations-primary" disabled={busy}>{busy ? "正在更新…" : "更新密码"}</button>
+              <label>{t("当前密码", "Current password")}<input type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} autoComplete="current-password" required /></label>
+              <label>{t("新密码", "New password")}<input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} minLength={12} maxLength={1024} autoComplete="new-password" required /></label>
+              <label>{t("确认新密码", "Confirm new password")}<input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} minLength={12} maxLength={1024} autoComplete="new-password" required /></label>
+              <p className="dg-account-security-note">{t("修改成功后，其他设备上的登录会话将退出。", "Other sessions will be signed out after the password changes.")}</p>
+              <button className="dg-operations-primary" disabled={busy}>{busy ? t("正在更新…", "Updating…") : t("更新密码", "Update password")}</button>
             </form>
           </section>
         </div>
 
         {profile.role === "admin" && <section className="dg-operations-panel dg-account-team">
-          <div className="dg-account-panel-head"><div><h2>团队成员</h2><p>{members.length} 位成员 · 管理邀请、账号状态与密码重置</p></div></div>
+          <div className="dg-account-panel-head"><div><h2>{t("团队成员", "Team members")}</h2><p>{t(`${members.length} 位成员 · 管理邀请、账号状态与密码重置`, `${members.length} members · Manage invitations, account status, and password resets`)}</p></div></div>
           <form className="dg-account-invite" onSubmit={inviteMember}>
-            <label>员工邮箱<input type="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} maxLength={254} required /></label>
-            <label>工作区角色<select value={inviteRole} onChange={(event) => setInviteRole(event.target.value as "sales" | "manager")}><option value="sales">销售</option><option value="manager">经理</option></select></label>
-            {inviteRole === "sales" && <label>负责客户<select value={inviteCustomer} onChange={(event) => setInviteCustomer(event.target.value)} required><option value="">选择客户</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></label>}
-            <button className="dg-operations-primary" disabled={busy || (inviteRole === "sales" && !customers.length)}>生成邀请链接</button>
+            <label>{t("员工邮箱", "Employee email")}<input type="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} maxLength={254} required /></label>
+            <label>{t("工作区角色", "Workspace role")}<select value={inviteRole} onChange={(event) => setInviteRole(event.target.value as "sales" | "manager")}><option value="sales">{t("销售", "Sales")}</option><option value="manager">{t("经理", "Manager")}</option></select></label>
+            {inviteRole === "sales" && <label>{t("负责客户", "Assigned customer")}<select value={inviteCustomer} onChange={(event) => setInviteCustomer(event.target.value)} required><option value="">{t("选择客户", "Select a customer")}</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></label>}
+            <button className="dg-operations-primary" disabled={busy || (inviteRole === "sales" && !customers.length)}>{t("生成邀请链接", "Create invitation link")}</button>
           </form>
-          {actionLink && <div className="dg-account-linkbox"><label>一次性链接<input value={actionLink} readOnly /></label><button type="button" className="dg-operations-secondary" onClick={() => void copyActionLink()}>复制链接</button></div>}
+          {actionLink && <div className="dg-account-linkbox"><label>{t("一次性链接", "One-time link")}<input value={actionLink} readOnly /></label><button type="button" className="dg-operations-secondary" onClick={() => void copyActionLink()}>{t("复制链接", "Copy link")}</button></div>}
           <div className="dg-account-member-list">{members.map((member) => <article className="dg-account-member" key={member.actor_id}>
             <div className="dg-account-member-info"><strong>{member.display_name}</strong><span>{member.email}</span><small>{roleName(member.role)}{member.customer_id ? ` · ${customers.find((item) => item.id === member.customer_id)?.name ?? member.customer_id}` : ""}</small></div>
-            <span className={`dg-account-status ${member.is_active ? "is-active" : ""}`}>{member.is_active ? "正常" : "已停用"}</span>
-            <div className="dg-account-member-actions"><button type="button" className="dg-operations-secondary" onClick={() => void resetMemberPassword(member)} disabled={busy || !member.is_active}>重置密码</button>{member.actor_id !== profile.actor_id && <button type="button" className="dg-operations-secondary" onClick={() => void toggleMember(member)} disabled={busy}>{member.is_active ? "停用账号" : "重新启用"}</button>}</div>
+            <span className={`dg-account-status ${member.is_active ? "is-active" : ""}`}>{member.is_active ? t("正常", "Active") : t("已停用", "Disabled")}</span>
+            <div className="dg-account-member-actions"><button type="button" className="dg-operations-secondary" onClick={() => void resetMemberPassword(member)} disabled={busy || !member.is_active}>{t("重置密码", "Reset password")}</button>{member.actor_id !== profile.actor_id && <button type="button" className="dg-operations-secondary" onClick={() => void toggleMember(member)} disabled={busy}>{member.is_active ? t("停用账号", "Disable account") : t("重新启用", "Reactivate")}</button>}</div>
           </article>)}</div>
-          {invitations.length > 0 && <div className="dg-account-invitations"><h3>待接受邀请</h3>{invitations.map((invitation) => <div className="dg-account-invitation" key={invitation.id}><span><strong>{invitation.email}</strong><small>{roleName(invitation.role)} · {invitation.expired ? "已过期" : `到期 ${new Date(invitation.expires_at).toLocaleString()}`}</small></span><button type="button" className="dg-operations-secondary" onClick={() => void revokeInvitation(invitation)} disabled={busy}>撤销邀请</button></div>)}</div>}
+          {invitations.length > 0 && <div className="dg-account-invitations"><h3>{t("待接受邀请", "Pending invitations")}</h3>{invitations.map((invitation) => <div className="dg-account-invitation" key={invitation.id}><span><strong>{invitation.email}</strong><small>{roleName(invitation.role)} · {invitation.expired ? t("已过期", "Expired") : t(`到期 ${new Date(invitation.expires_at).toLocaleString()}`, `Expires ${new Date(invitation.expires_at).toLocaleString("en-US")}`)}</small></span><button type="button" className="dg-operations-secondary" onClick={() => void revokeInvitation(invitation)} disabled={busy}>{t("撤销邀请", "Revoke invitation")}</button></div>)}</div>}
         </section>}
       </>}
     </main>

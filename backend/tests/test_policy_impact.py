@@ -4,6 +4,10 @@ from decimal import Decimal
 from sqlalchemy import func, select
 
 from app.db.models import ApprovalRequest, PolicyDraft, QuoteDraft, RunRecord
+from app.db.models import Customer, DemoActor, Policy, Product
+from app.schemas.deal import InquiryIntent, QuoteItemIntent
+from app.services.policy_impact import _evaluate_snapshot
+from app.agents.workflow import _validate
 
 
 def _create_base_run(client):
@@ -85,3 +89,56 @@ def test_policy_impact_requires_admin(client):
     })
     assert response.status_code == 403
     assert response.json()["detail"]["code"] == "ADMIN_REQUIRED"
+
+
+def test_frozen_replay_and_live_guard_share_aggregate_order_constraints(client):
+    run = _create_base_run(client)
+    with client.app.state.session_factory() as db:
+        record = db.get(RunRecord, run["run_id"])
+        snapshot = record.result["_impact_snapshot"]
+        original = snapshot["lines"][0]
+        repeated = {**original, "proposal": {**original["proposal"], "quantity": 1200}}
+        snapshot["lines"] = [repeated, repeated]
+        policy = db.scalar(select(Policy).where(Policy.policy_id == "DISCOUNT-01", Policy.version == "v1"))
+        customer = db.get(Customer, "C-001")
+        actor = db.get(DemoActor, "sales_a")
+        product = db.scalar(select(Product).where(Product.sku == "P-100"))
+        live = _validate({
+            "intent": InquiryIntent(items=[
+                QuoteItemIntent(product_id="P-100", quantity=1200, requested_discount_pct=Decimal("5")),
+                QuoteItemIntent(product_id="P-100", quantity=1200, requested_discount_pct=Decimal("5")),
+            ], policy_scope="general", customer_message=""),
+            "actor": actor, "customer": customer, "products": [product, product], "policy": policy,
+        })["decision"]
+        frozen = _evaluate_snapshot(snapshot, policy)
+
+    assert live["reason_code"] == frozen["reason_code"] == "INSUFFICIENT_STOCK"
+    assert live["decision"] == frozen["decision"] == "DENY"
+
+
+def test_mixed_currency_is_shared_order_constraint(client):
+    run = _create_base_run(client)
+    with client.app.state.session_factory() as db:
+        record = db.get(RunRecord, run["run_id"])
+        snapshot = record.result["_impact_snapshot"]
+        second = {**snapshot["lines"][0], "product": {
+            **snapshot["lines"][0]["product"], "id": "P-200", "currency": "EUR", "stock": 800,
+        }, "proposal": {**snapshot["lines"][0]["proposal"], "product_id": "P-200"}}
+        snapshot["lines"] = [snapshot["lines"][0], second]
+        policy = db.scalar(select(Policy).where(Policy.policy_id == "DISCOUNT-01", Policy.version == "v1"))
+        customer = db.get(Customer, "C-001")
+        actor = db.get(DemoActor, "sales_a")
+        first_product = db.scalar(select(Product).where(Product.sku == "P-100"))
+        second_product = db.scalar(select(Product).where(Product.sku == "P-200"))
+        second_product.currency = "EUR"
+        live = _validate({
+            "intent": InquiryIntent(items=[
+                QuoteItemIntent(product_id="P-100", quantity=10, requested_discount_pct=Decimal("5")),
+                QuoteItemIntent(product_id="P-200", quantity=10, requested_discount_pct=Decimal("5")),
+            ], policy_scope="general", customer_message=""),
+            "actor": actor, "customer": customer, "products": [first_product, second_product], "policy": policy,
+        })["decision"]
+        frozen = _evaluate_snapshot(snapshot, policy)
+
+    assert live["reason_code"] == frozen["reason_code"] == "MIXED_CURRENCY_UNSUPPORTED"
+    assert live["decision"] == frozen["decision"] == "DENY"

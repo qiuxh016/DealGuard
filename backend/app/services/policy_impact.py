@@ -12,6 +12,8 @@ from app.agents.workflow import build_workflow
 from app.db.models import Customer, DemoActor, Policy, PolicyDraft, Product, RunRecord
 from app.guards.business_rules import evaluate_quote_with_trace
 from app.schemas.deal import ActionProposal
+from app.schemas.deal import GuardDecision
+from app.services.inventory import order_constraint_failure
 
 
 def _candidate_policy(draft: PolicyDraft) -> Policy:
@@ -56,6 +58,7 @@ def _evaluate_snapshot(snapshot: dict[str, Any], policy: Policy | None) -> dict[
     )
     line_decisions = []
     totals = []
+    validated_lines = []
     for line in snapshot["lines"]:
         product_data, proposal_data = line["product"], line["proposal"]
         product = Product(
@@ -69,11 +72,20 @@ def _evaluate_snapshot(snapshot: dict[str, Any], policy: Policy | None) -> dict[
             quantity=int(proposal_data["quantity"]),
             requested_discount_pct=Decimal(str(proposal_data["requested_discount_pct"])),
         )
+        validated_lines.append((product.id, product.currency, proposal.quantity, product.stock))
         decision, breakdown, _checks = evaluate_quote_with_trace(
             actor, customer, product, policy, proposal, snapshot.get("policy_scope", "general"),
         )
         line_decisions.append(decision)
         totals.append(str(breakdown.total) if breakdown else None)
+    constraint_failure = order_constraint_failure(validated_lines)
+    if constraint_failure:
+        reason_code, product_id, requested, available = constraint_failure
+        message = "All items in one quote must use the same currency." if reason_code == "MIXED_CURRENCY_UNSUPPORTED" else f"Requested quantity {requested} for {product_id} exceeds the {available} units currently available."
+        decision = GuardDecision(decision="DENY", reason_code=reason_code, policy_id=policy.policy_id if policy else None,
+                                 policy_version=policy.version if policy else None, human_message=message)
+        return {"decision": decision.decision, "reason_code": decision.reason_code,
+                "totals": [None for _ in totals], "lines": [decision.model_dump(mode="json") for _ in totals]}
     denied = next((item for item in line_decisions if item.decision == "DENY"), None)
     review = next((item for item in line_decisions if item.decision == "REVIEW"), None)
     chosen = denied or review or (line_decisions[0] if line_decisions else None)
@@ -92,6 +104,26 @@ def _decision_diff(run_id: str, baseline: dict[str, Any], candidate: dict[str, A
         "baseline_decision": baseline["decision"], "candidate_decision": candidate["decision"],
         "baseline_reason_code": baseline["reason_code"], "candidate_reason_code": candidate["reason_code"],
         "changed": changed, "details": {"baseline_totals": baseline["totals"], "candidate_totals": candidate["totals"]},
+    }
+
+
+def _snapshot_details(snapshot: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "customer": snapshot.get("customer"),
+        "actor": snapshot.get("actor"),
+        "policy": {
+            "policy_id": (snapshot.get("policy") or {}).get("policy_id"),
+            "version": (snapshot.get("policy") or {}).get("version"),
+            "source": (snapshot.get("policy") or {}).get("source"),
+        },
+        "lines": [
+            {
+                "proposal": row.get("proposal"),
+                "product": row.get("product"),
+                "policy_evidence": row.get("policy_evidence"),
+            }
+            for row in snapshot.get("lines", [])
+        ],
     }
 
 
@@ -150,7 +182,7 @@ def simulate_policy_impact(
                 "baseline_decision": baseline["decision"], "candidate_decision": proposed["decision"],
                 "baseline_reason_code": baseline["reason_code"], "candidate_reason_code": proposed["reason_code"],
                 "changed": changed,
-                "details": {"baseline_retrieval_mode": baseline.get("retrieval_mode"), "candidate_retrieval_mode": proposed.get("retrieval_mode"), "candidate_execution_mode": proposed.get("execution_mode")},
+                "details": {"baseline_retrieval_mode": baseline.get("retrieval_mode"), "candidate_retrieval_mode": proposed.get("retrieval_mode"), "candidate_execution_mode": proposed.get("execution_mode"), "trusted_snapshot": _snapshot_details((run.result or {}).get("_impact_snapshot") or {})},
             })
     else:
         for run in rows:
@@ -161,7 +193,9 @@ def simulate_policy_impact(
             baseline_policy = _stored_policy(snapshot.get("policy"), tenant_id)
             baseline = _evaluate_snapshot(snapshot, baseline_policy)
             proposed = _evaluate_snapshot(snapshot, candidate)
-            cases.append(_decision_diff(run.id, baseline, proposed))
+            case = _decision_diff(run.id, baseline, proposed)
+            case["details"]["trusted_snapshot"] = _snapshot_details(snapshot)
+            cases.append(case)
 
     replayed = [case for case in cases if case["status"] == "replayed"]
     changed = [case for case in replayed if case.get("changed")]
@@ -173,4 +207,5 @@ def simulate_policy_impact(
         "changed_cases": len(changed),
         "change_rate": Decimal(len(changed)) / Decimal(len(replayed)) if replayed else None,
         "transitions": dict(transitions), "cases": cases, "writes_created": False,
+        "candidate_title": candidate.title, "candidate_source": candidate.source,
     }

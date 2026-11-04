@@ -264,6 +264,7 @@ def create_run(
                         "unit_price": row.get("unit_price"),
                         "stock": row.get("available_stock"),
                     },
+                    "policy_evidence": row.get("policy_provenance"),
                 }
                 for row in line_rows
             ],

@@ -37,7 +37,7 @@ def test_legacy_sqlite_migrates_without_losing_rows(tmp_path, monkeypatch):
         assert connection.scalar(text("SELECT source FROM policies WHERE id='p1'")) == "source-v1"
         assert connection.scalar(text("SELECT inquiry FROM runs WHERE id='r1'")) == "quote"
         assert "legacy" in connection.scalar(text("SELECT result FROM runs WHERE id='r1'"))
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0014_product_sku"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0015_policy_version_uniqueness"
         product = connection.execute(text("SELECT id,sku FROM products WHERE sku='P-100'")).one()
         assert product.id != "P-100"
         assert connection.scalar(text("SELECT product_id FROM quote_drafts WHERE id='q1'")) == "P-100"
@@ -94,7 +94,36 @@ def test_fresh_metadata_database_can_be_stamped_and_upgraded(tmp_path):
     command.stamp(config, "0001_baseline")
     command.upgrade(config, "head")
     with engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0014_product_sku"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0015_policy_version_uniqueness"
         assert "email" in {column["name"] for column in inspect(connection).get_columns("auth_accounts")}
         assert {"policy_audit_events", "workspace_invitations", "password_reset_tokens"}.issubset(inspect(connection).get_table_names())
+    engine.dispose()
+
+
+@pytest.mark.parametrize("conflict, message", [
+    ("policy_duplicate", "policies contains duplicate"),
+    ("policy_draft", "an unrelated draft share"),
+])
+def test_policy_uniqueness_migration_reports_existing_conflicts(tmp_path, conflict, message):
+    database = tmp_path / f"{conflict}.sqlite"
+    engine = create_engine(f"sqlite:///{database}")
+    with engine.begin() as connection:
+        connection.exec_driver_sql("CREATE TABLE tenants (id VARCHAR PRIMARY KEY)")
+        connection.exec_driver_sql("INSERT INTO tenants VALUES ('tenant-a')")
+        connection.exec_driver_sql("CREATE TABLE policies (id VARCHAR PRIMARY KEY, tenant_id VARCHAR NOT NULL, policy_id VARCHAR NOT NULL, version VARCHAR NOT NULL)")
+        connection.exec_driver_sql("CREATE TABLE policy_drafts (id VARCHAR PRIMARY KEY, tenant_id VARCHAR NOT NULL, policy_id VARCHAR NOT NULL, version VARCHAR NOT NULL, policy_row_id VARCHAR REFERENCES policies(id))")
+        connection.exec_driver_sql("CREATE TABLE alembic_version (version_num VARCHAR(64) NOT NULL PRIMARY KEY)")
+        connection.exec_driver_sql("INSERT INTO alembic_version VALUES ('0014_product_sku')")
+        connection.exec_driver_sql("INSERT INTO policies VALUES ('p1','tenant-a','LIMIT','v1')")
+        if conflict == "policy_duplicate":
+            connection.exec_driver_sql("INSERT INTO policies VALUES ('p2','tenant-a','LIMIT','v1')")
+        else:
+            connection.exec_driver_sql("INSERT INTO policy_drafts VALUES ('d1','tenant-a','LIMIT','v1',NULL)")
+    config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    config.set_main_option("sqlalchemy.url", f"sqlite:///{database.as_posix()}")
+    with pytest.raises(RuntimeError, match=message):
+        command.upgrade(config, "head")
+    with engine.connect() as connection:
+        assert connection.scalar(text("SELECT COUNT(*) FROM policies WHERE policy_id='LIMIT'")) == (2 if conflict == "policy_duplicate" else 1)
+        assert "policy_version_keys" not in inspect(connection).get_table_names()
     engine.dispose()

@@ -5,7 +5,7 @@ from pathlib import Path
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.db.models import ApprovalRequest, Customer, DemoActor, Policy, PolicyDraft, Product, QuoteDraft, RunRecord, Tenant
+from app.db.models import ApprovalRequest, Customer, DemoActor, Policy, PolicyDraft, PolicyVersionKey, Product, QuoteDraft, RunRecord, Tenant
 
 TENANT_ID = "harborlight-demo"
 POLICY_ID = "DISCOUNT-01"
@@ -56,6 +56,14 @@ def seed_demo_data(db: Session) -> None:
             customer_tier="VIP", max_discount_pct=Decimal("5.00"), review_max_discount_pct=Decimal("8.00"),
             exception_approval_allowed=True, effective_from=datetime(2026, 1, 1, tzinfo=timezone.utc), source=POLICY_TEXT["v3"],
         ))
+    db.flush()
+    for policy in db.scalars(select(Policy).where(Policy.tenant_id == TENANT_ID)).all():
+        if not db.scalar(select(PolicyVersionKey.id).where(
+            PolicyVersionKey.tenant_id == policy.tenant_id,
+            PolicyVersionKey.policy_id == policy.policy_id,
+            PolicyVersionKey.version == policy.version,
+        )):
+            db.add(PolicyVersionKey(tenant_id=policy.tenant_id, policy_id=policy.policy_id, version=policy.version))
     db.commit()
 
 
@@ -63,7 +71,7 @@ def reset_demo_data(db: Session, tenant_id: str = TENANT_ID) -> None:
     for actor in db.scalars(select(DemoActor).where(DemoActor.tenant_id == tenant_id)).all():
         actor.customer_id = None
     db.flush()
-    for model in (ApprovalRequest, PolicyDraft, RunRecord, QuoteDraft, Policy, Product, Customer):
+    for model in (ApprovalRequest, PolicyDraft, PolicyVersionKey, RunRecord, QuoteDraft, Policy, Product, Customer):
         db.execute(delete(model).where(model.tenant_id == tenant_id))
     db.commit()
     if tenant_id == TENANT_ID:

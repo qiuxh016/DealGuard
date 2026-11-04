@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "cross-env NEXT_SWC_PATH=.next-swc next dev",
+    "dev": "cross-env PORT=3001 NEXT_SWC_PATH=.next-swc next dev",
     "build": "cross-env NEXT_SWC_PATH=.next-swc next build",
-    "start": "cross-env NEXT_SWC_PATH=.next-swc next start",
+    "start": "cross-env PORT=3001 NEXT_SWC_PATH=.next-swc next start",
     "lint": "eslint .",
     "test:e2e": "playwright test"
   },

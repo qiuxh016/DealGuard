@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, LargeBinary, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, synonym
 
 from app.db.database import Base
@@ -19,6 +19,7 @@ class Customer(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     tier: Mapped[str] = mapped_column(String, nullable=False)
     tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), nullable=False, default="harborlight-demo")
+    image_asset_id: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class Tenant(Base):
@@ -26,6 +27,17 @@ class Tenant(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
+
+
+class MediaAsset(Base):
+    __tablename__ = "media_assets"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), nullable=False, index=True)
+    uploaded_by: Mapped[str] = mapped_column(String, nullable=False)
+    content_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    content: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
 
 class AuthAccount(Base):
@@ -90,6 +102,7 @@ class Product(Base):
     unit_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     stock: Mapped[int] = mapped_column(Integer, nullable=False)
     tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), nullable=False, default="harborlight-demo")
+    image_asset_id: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class DemoActor(Base):
@@ -100,10 +113,12 @@ class DemoActor(Base):
     role: Mapped[str] = mapped_column(String, nullable=False)
     customer_id: Mapped[str | None] = mapped_column(ForeignKey("customers.id"), nullable=True)
     tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), nullable=False, default="harborlight-demo")
+    image_asset_id: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class Policy(Base):
     __tablename__ = "policies"
+    __table_args__ = (UniqueConstraint("tenant_id", "policy_id", "version", name="uq_policy_tenant_version"),)
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
     policy_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
@@ -193,6 +208,7 @@ class ApprovalRequest(Base):
 
 class PolicyDraft(Base):
     __tablename__ = "policy_drafts"
+    __table_args__ = (UniqueConstraint("tenant_id", "policy_id", "version", name="uq_policy_draft_tenant_version"),)
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
     policy_id: Mapped[str] = mapped_column(String, nullable=False)
@@ -211,6 +227,16 @@ class PolicyDraft(Base):
     policy_row_id: Mapped[str | None] = mapped_column(ForeignKey("policies.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
     tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), nullable=False, default="harborlight-demo")
+
+
+class PolicyVersionKey(Base):
+    __tablename__ = "policy_version_keys"
+    __table_args__ = (UniqueConstraint("tenant_id", "policy_id", "version", name="uq_policy_version_key"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), nullable=False)
+    policy_id: Mapped[str] = mapped_column(String, nullable=False)
+    version: Mapped[str] = mapped_column(String, nullable=False)
 
 
 class PolicyAuditEvent(Base):

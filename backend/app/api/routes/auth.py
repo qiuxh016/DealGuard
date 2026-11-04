@@ -6,7 +6,7 @@ import re
 import secrets
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
@@ -18,9 +18,11 @@ from app.db.models import AuthAccount, AuthSession, Customer, DemoActor, Passwor
 from app.services.actors import COOKIE_NAME, SESSION_TTL, actor_payload, get_session_actor, hash_password, issue_session, verify_password
 from app.services.actors import get_current_actor
 from app.services.permissions import require_capability
+from app.services.media_assets import attach_image, read_image, remove_image
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 _login_failures: dict[str, deque[float]] = {}
+_registration_attempts: dict[str, deque[float]] = {}
 
 
 class LoginRequest(BaseModel):
@@ -164,10 +166,10 @@ def register(body: RegistrationRequest, request: Request, response: Response, db
     window = max(1, settings.auth_login_window_seconds)
     client_host = request.client.host if request.client else "unknown"
     rate_key = f"register:{client_host}"
-    attempts = _login_failures.setdefault(rate_key, deque())
+    attempts = _registration_attempts.setdefault(rate_key, deque())
     while attempts and now - attempts[0] >= window:
         attempts.popleft()
-    if len(attempts) >= max(1, settings.auth_login_max_attempts):
+    if len(attempts) >= max(1, settings.auth_register_max_attempts):
         retry_after = max(1, int(window - (now - attempts[0])))
         raise HTTPException(status_code=429, headers={"Retry-After": str(retry_after)},
                             detail={"code": "REGISTRATION_RATE_LIMITED", "message": "Too many registration attempts. Try again shortly."})
@@ -383,7 +385,24 @@ def me(actor: DemoActor = Depends(get_session_actor), db: Session = Depends(get_
         **actor_payload(actor),
         "email": account.email if account else None,
         "workspace_name": tenant.name if tenant else None,
+        "image_id": actor.image_asset_id,
     }
+
+
+@router.post("/me/image")
+async def upload_profile_image(
+    file: UploadFile = File(...),
+    actor: DemoActor = Depends(get_session_actor),
+    db: Session = Depends(get_db),
+):
+    content, content_type = await read_image(file)
+    return {"image_id": attach_image(db, actor, actor, content, content_type)}
+
+
+@router.delete("/me/image")
+def delete_profile_image(actor: DemoActor = Depends(get_session_actor), db: Session = Depends(get_db)):
+    remove_image(db, actor, actor)
+    return {"image_id": None}
 
 
 @router.patch("/me")

@@ -320,6 +320,8 @@ class PolicyImpactReport(BaseModel):
     transitions: dict[str, int]
     cases: list[PolicyImpactCase]
     writes_created: Literal[False] = False
+    candidate_title: str
+    candidate_source: str
 
 
 class MetricsResponse(BaseModel):
