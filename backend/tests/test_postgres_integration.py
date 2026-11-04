@@ -1,9 +1,11 @@
 from pathlib import Path
+import os
 from uuid import uuid4
 from concurrent.futures import ThreadPoolExecutor
 
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import inspect, text, select
@@ -16,7 +18,15 @@ from app.services.policy_versions import reserve_policy_version
 from app.db.models import PolicyVersionKey
 
 
-pytestmark = pytest.mark.skipif(engine.dialect.name != "postgresql", reason="PostgreSQL integration check requires DATABASE_URL to use PostgreSQL")
+_database_name = engine.url.database or ""
+_explicit_isolated_postgres = (
+    os.environ.get("DEALGUARD_RUN_PG_TESTS") == "1"
+    and _database_name.endswith(("_test", "_ci"))
+)
+pytestmark = pytest.mark.skipif(
+    engine.dialect.name != "postgresql" or not _explicit_isolated_postgres,
+    reason="PostgreSQL integration tests mutate data and migrate schemas; use an explicitly isolated *_test or *_ci database and set DEALGUARD_RUN_PG_TESTS=1",
+)
 
 
 def test_postgres_registration_and_invitation_respect_foreign_keys():
@@ -120,9 +130,10 @@ def test_postgres_tenant_migration_round_trip_preserves_rows():
         assert "tenant_id" not in {column["name"] for column in inspect(connection).get_columns("customers")}
 
     upgrade_database()
+    current_head = ScriptDirectory.from_config(config).get_current_head()
     with engine.connect() as connection:
         after = {table: connection.execute(text(f"SELECT count(*) FROM {table}")).scalar_one() for table in tables}
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0015_policy_version_uniqueness"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == current_head
         assert connection.execute(text("SELECT count(*) FROM policies WHERE action_type = 'quote_discount'")).scalar_one() == after["policies"]
         assert after == before
         assert connection.execute(text("SELECT count(*) FROM customers WHERE tenant_id = 'harborlight-demo'")).scalar_one() == before["customers"]

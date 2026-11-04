@@ -27,7 +27,12 @@ from app.services.actors import hash_password
 TENANT_ID = "dealguard-showcase-workspace"
 DEFAULT_EMAIL = "demo@dealguard.local"
 SHOWCASE_PASSWORD = "DealGuard-Showcase-2026!"
+SALES_EMAIL = "sales@dealguard.local"
+SALES_PASSWORD = "DealGuard-Sales-2026!"
+MANAGER_EMAIL = "manager@dealguard.local"
+MANAGER_PASSWORD = "DealGuard-Manager-2026!"
 ADMIN_ID = "dealguard-showcase-admin"
+MANAGER_ID = "dealguard-showcase-manager"
 CUSTOMERS = (
     ("DG-C-001", "HarborLight VIP Retail", "VIP"),
     ("DG-C-002", "Northstar Electronics", "VIP"),
@@ -39,6 +44,7 @@ SALES_RUNNERS = {
     customer_id: f"showcase_sales_{index:03d}"
     for index, (customer_id, _, _) in enumerate(CUSTOMERS, start=1)
 }
+SHOWCASE_SALES_ID = SALES_RUNNERS["DG-C-005"]
 
 PRODUCTS = (
     ("P-100", "Industrial LED Panel", "USD", "100.00", 5000),
@@ -134,6 +140,64 @@ def _seed_run_history(db, sales_runners: dict[str, DemoActor]) -> None:
         settings.llm_api_key, settings.llm_model, settings.local_embedding_model_path = original
 
 
+def _ensure_showcase_sales_account(db) -> None:
+    member = db.get(DemoActor, SHOWCASE_SALES_ID)
+    if member is None or member.tenant_id != TENANT_ID or member.role != "sales" or member.customer_id != "DG-C-005":
+        raise RuntimeError("The showcase BluePeak sales member is missing or has an unexpected assignment.")
+    member.display_name = "DealGuard Showcase Sales"
+
+    account = db.scalar(select(AuthAccount).where(AuthAccount.email == SALES_EMAIL))
+    if account is not None and account.actor_id != member.id:
+        raise RuntimeError(f"{SALES_EMAIL} already belongs to another account; no account data was changed.")
+    account = db.get(AuthAccount, member.id)
+    if account is None:
+        account = AuthAccount(actor_id=member.id, email=SALES_EMAIL, password_hash=hash_password(SALES_PASSWORD), is_active=True)
+        db.add(account)
+    else:
+        account.email = SALES_EMAIL
+        account.password_hash = hash_password(SALES_PASSWORD)
+        account.is_active = True
+
+
+def _ensure_showcase_manager_account(db) -> None:
+    member = db.get(DemoActor, MANAGER_ID)
+    if member is None:
+        member = DemoActor(id=MANAGER_ID, display_name="DealGuard Showcase Manager", role="manager", customer_id=None, tenant_id=TENANT_ID)
+        db.add(member)
+        db.flush()
+    elif member.tenant_id != TENANT_ID or member.role != "manager" or member.customer_id is not None:
+        raise RuntimeError("The showcase manager member already exists with an unexpected assignment.")
+
+    account = db.scalar(select(AuthAccount).where(AuthAccount.email == MANAGER_EMAIL))
+    if account is not None and account.actor_id != member.id:
+        raise RuntimeError(f"{MANAGER_EMAIL} already belongs to another account; no account data was changed.")
+    account = db.get(AuthAccount, member.id)
+    if account is None:
+        account = AuthAccount(actor_id=member.id, email=MANAGER_EMAIL, password_hash=hash_password(MANAGER_PASSWORD), is_active=True)
+        db.add(account)
+    else:
+        account.email = MANAGER_EMAIL
+        account.password_hash = hash_password(MANAGER_PASSWORD)
+        account.is_active = True
+
+
+def ensure_showcase_manager_account() -> tuple[str, str, bool]:
+    if settings.app_env == "production":
+        raise RuntimeError("Showcase account provisioning is disabled in APP_ENV=production.")
+    upgrade_database()
+    with SessionLocal() as db:
+        if db.get(Tenant, TENANT_ID) is None:
+            raise RuntimeError(f"Showcase workspace {TENANT_ID} does not exist; initialize it first with app.db.showcase.")
+        existed = db.get(DemoActor, MANAGER_ID) is not None
+        try:
+            _ensure_showcase_manager_account(db)
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        return MANAGER_EMAIL, MANAGER_PASSWORD, not existed
+
+
 def create_showcase_account(email: str = DEFAULT_EMAIL) -> tuple[str, str, bool]:
     if settings.app_env == "production":
         raise RuntimeError("Showcase account provisioning is disabled in APP_ENV=production.")
@@ -146,6 +210,8 @@ def create_showcase_account(email: str = DEFAULT_EMAIL) -> tuple[str, str, bool]
         if account is not None:
             actor = db.get(DemoActor, account.actor_id)
             if actor and actor.tenant_id == TENANT_ID:
+                _ensure_showcase_sales_account(db)
+                _ensure_showcase_manager_account(db)
                 account.password_hash = hash_password(SHOWCASE_PASSWORD)
                 db.commit()
                 return email, SHOWCASE_PASSWORD, False
@@ -161,6 +227,8 @@ def create_showcase_account(email: str = DEFAULT_EMAIL) -> tuple[str, str, bool]
             }
             _seed_business_data(db, actor, list(sales_runners.values()))
             db.add(AuthAccount(actor_id=actor.id, email=email, password_hash=hash_password(SHOWCASE_PASSWORD), is_active=True))
+            _ensure_showcase_sales_account(db)
+            _ensure_showcase_manager_account(db)
             db.commit()
         except Exception:
             db.rollback()
@@ -172,9 +240,16 @@ def create_showcase_account(email: str = DEFAULT_EMAIL) -> tuple[str, str, bool]
 def main() -> None:
     import argparse
 
-    parser = argparse.ArgumentParser(description="Provision one persistent DealGuard showcase admin account and its workspace data.")
+    parser = argparse.ArgumentParser(description="Provision persistent DealGuard showcase accounts and workspace data.")
     parser.add_argument("--email", default=DEFAULT_EMAIL, help=f"login email (default: {DEFAULT_EMAIL})")
+    parser.add_argument("--manager", action="store_true", help="create or reset only the showcase manager account")
     arguments = parser.parse_args()
+    if arguments.manager:
+        email, password, created = ensure_showcase_manager_account()
+        print("Showcase manager account created in the configured database." if created else "Showcase manager account password reset; workspace data was preserved.")
+        print(f"Email: {email}")
+        print(f"Password: {password}")
+        return
     email, password, created = create_showcase_account(arguments.email)
     if created:
         print("Showcase workspace created in the configured database.")
@@ -182,6 +257,10 @@ def main() -> None:
         print("Showcase account password reset; workspace data was preserved.")
     print(f"Email: {email}")
     print(f"Password: {password}")
+    print(f"Sales email: {SALES_EMAIL}")
+    print(f"Sales password: {SALES_PASSWORD}")
+    print(f"Manager email: {MANAGER_EMAIL}")
+    print(f"Manager password: {MANAGER_PASSWORD}")
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import "../history.css";
 import "./policy-impact.css";
 import { WorkspaceNav } from "../../components/WorkspaceNav";
-import { localizedDecision, localizedReason, localizedStatus, useLanguage } from "../../components/LanguageProvider";
+import { localizedCustomerTier, localizedDecision, localizedExecutionMode, localizedReason, localizedStatus, useLanguage } from "../../components/LanguageProvider";
 
 type PolicyDraft = {
   id: string; policy_id: string; version: string; title: string; action_type: string | null;
@@ -111,7 +111,7 @@ export default function PolicyImpactPage() {
         </label>
         <button className="dg-history-button dg-impact-run" disabled={busy || !draftId || selectedRunIds.length === 0}>{busy ? t("正在分析…", "Analyzing…") : t("运行影响分析", "Run impact analysis")}</button>
       </form>
-      {selectedDraft && <div className="dg-impact-candidate"><span>{t("候选版本", "Candidate version")}</span><strong>{selectedDraft.policy_id}@{selectedDraft.version}</strong><span>{selectedDraft.action_type === "quote_discount" ? t(`${selectedDraft.customer_tier} 折扣上限 ${selectedDraft.max_discount_pct ?? "—"}%`, `${selectedDraft.customer_tier} discount limit ${selectedDraft.max_discount_pct ?? "—"}%`) : selectedDraft.title}</span></div>}
+      {selectedDraft && <div className="dg-impact-candidate"><span>{t("候选版本", "Candidate version")}</span><strong>{selectedDraft.policy_id}@{selectedDraft.version}</strong><span>{selectedDraft.action_type === "quote_discount" ? t(`${localizedCustomerTier(selectedDraft.customer_tier, locale)} 折扣上限 ${selectedDraft.max_discount_pct ?? "—"}%`, `${selectedDraft.customer_tier} discount limit ${selectedDraft.max_discount_pct ?? "—"}%`) : selectedDraft.title}</span></div>}
       {notice && <p className="dg-history-notice" role="alert">{notice}</p>}
       {drafts.length === 0 && !notice && <p className="dg-impact-empty">{t("先在政策管理中创建并保存一个未激活的结构化政策草稿。", "Create and save an inactive structured policy draft in Policy Audit first.")}</p>}
     </section>
@@ -130,7 +130,7 @@ export default function PolicyImpactPage() {
           <td><input aria-label={t(`选择询盘 ${run.run_id}`, `Select inquiry ${run.run_id}`)} type="checkbox" checked={selectedRunIds.includes(run.run_id)} onChange={() => toggleRun(run.run_id)} /></td>
           <td>{new Date(run.created_at).toLocaleString(locale === "zh" ? "zh-CN" : "en-US")}</td><td><code>{run.run_id.slice(0, 12)}</code></td>
           <td>{localizedDecision(run.decision, locale) || localizedStatus(run.status, locale)}<small>{localizedReason(run.reason_code, locale)}</small></td>
-          <td>{run.policy_id ? `${run.policy_id}@${run.policy_version ?? "—"}` : "—"}</td><td>{run.execution_mode}</td>
+          <td>{run.policy_id ? `${run.policy_id}@${run.policy_version ?? "—"}` : "—"}</td><td>{localizedExecutionMode(run.execution_mode, locale)}</td>
         </tr>)}
       </tbody></table></div> : <p className="dg-impact-empty">{t("当前工作区没有可回放的历史询盘。", "No historical inquiries are available for replay in this workspace.")}</p>}
     </section>
@@ -165,7 +165,7 @@ export default function PolicyImpactPage() {
                   <span>{localizedReason(item.candidate_reason_code ?? item.skip_reason, locale)}</span>
                   {snapshot && <details className="dg-impact-detail">
                     <summary>{t("查看可信快照与引用", "View trusted snapshot and citations")}</summary>
-                    <p>客户等级：{snapshot.customer?.tier ?? "—"} · 基线政策：{snapshot.policy?.policy_id ?? "—"}@{snapshot.policy?.version ?? "—"}</p>
+                    <p>客户等级：{localizedCustomerTier(snapshot.customer?.tier, locale)} · 基线政策：{snapshot.policy?.policy_id ?? "—"}@{snapshot.policy?.version ?? "—"}</p>
                     {snapshot.lines?.map((line, index) => <article key={`${line.product?.id ?? "item"}-${index}`}>
                       <strong>{line.product?.name ?? line.product?.id ?? "商品"}</strong>
                       <span>{line.proposal?.quantity ?? "—"} 件 · 折扣 {line.proposal?.requested_discount_pct ?? "—"}% · 单价 {line.product?.currency ?? ""} {line.product?.unit_price ?? "—"} · 快照库存 {line.product?.stock ?? "—"}</span>

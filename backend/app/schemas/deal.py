@@ -96,7 +96,7 @@ class QuoteBreakdown(BaseModel):
 
 class QuoteDraftResponse(BaseModel):
     id: str
-    status: Literal["DRAFT"]
+    status: Literal["DRAFT", "REVISED", "ISSUED", "ACCEPTED", "REJECTED", "EXPIRED"]
     customer_id: str
     product_id: str
     breakdown: QuoteBreakdown
@@ -147,6 +147,26 @@ class PolicyResponse(BaseModel):
 
 class QuoteUpdateRequest(BaseModel):
     requested_discount_pct: Decimal = Field(ge=0, le=100)
+
+
+class QuoteChangeLine(BaseModel):
+    product_id: str = Field(min_length=1, max_length=80)
+    quantity: int = Field(gt=0, le=1_000_000)
+    requested_discount_pct: Decimal = Field(ge=0, le=100)
+
+
+class QuoteRevisionRequest(BaseModel):
+    lines: list[QuoteChangeLine] = Field(min_length=1, max_length=20)
+
+
+class CounterofferRequest(BaseModel):
+    requested_discount_pct: Decimal = Field(ge=0, le=100)
+    quantity: int | None = Field(default=None, gt=0, le=1_000_000)
+
+
+class CustomerQuoteResponse(BaseModel):
+    decision: Literal["ACCEPT", "REJECT"]
+    reason: str | None = Field(default=None, max_length=1000)
 
 
 class ApprovalRequestResponse(BaseModel):

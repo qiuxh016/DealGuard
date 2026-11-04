@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, inspect, text
 
 from app.db.database import Base
@@ -33,11 +34,12 @@ def test_legacy_sqlite_migrates_without_losing_rows(tmp_path, monkeypatch):
         connection.execute(text("INSERT INTO quote_drafts (id,owner_actor_id,customer_id,product_id,quantity,unit_price,discount_pct,subtotal,discount_amount,total,policy_id,policy_version,status,created_at,tenant_id) VALUES ('q1','sales_a','C-001','P-100',10,100,5,1000,50,950,'DISCOUNT-01','v1','DRAFT','2026-11-03','harborlight-demo')"))
         connection.execute(text("INSERT INTO approval_requests (id,run_id,applicant_actor_id,customer_id,product_id,quantity,discount_pct,policy_id,policy_version,state,created_at,tenant_id) VALUES ('a1','r1','sales_a','C-001','P-100',10,7,'DISCOUNT-01','v1','PENDING','2026-11-03','harborlight-demo')"))
     command.upgrade(config, "head")
+    current_head = ScriptDirectory.from_config(config).get_current_head()
     with engine.connect() as connection:
         assert connection.scalar(text("SELECT source FROM policies WHERE id='p1'")) == "source-v1"
         assert connection.scalar(text("SELECT inquiry FROM runs WHERE id='r1'")) == "quote"
         assert "legacy" in connection.scalar(text("SELECT result FROM runs WHERE id='r1'"))
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0015_policy_version_uniqueness"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == current_head
         product = connection.execute(text("SELECT id,sku FROM products WHERE sku='P-100'")).one()
         assert product.id != "P-100"
         assert connection.scalar(text("SELECT product_id FROM quote_drafts WHERE id='q1'")) == "P-100"
@@ -93,8 +95,9 @@ def test_fresh_metadata_database_can_be_stamped_and_upgraded(tmp_path):
     config.set_main_option("sqlalchemy.url", f"sqlite:///{database.as_posix()}")
     command.stamp(config, "0001_baseline")
     command.upgrade(config, "head")
+    current_head = ScriptDirectory.from_config(config).get_current_head()
     with engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0015_policy_version_uniqueness"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == current_head
         assert "email" in {column["name"] for column in inspect(connection).get_columns("auth_accounts")}
         assert {"policy_audit_events", "workspace_invitations", "password_reset_tokens"}.issubset(inspect(connection).get_table_names())
     engine.dispose()

@@ -2,6 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 const backendUrl = process.env.DATABASE_URL;
 const frontendPort = process.env.PLAYWRIGHT_FRONTEND_PORT ?? "3001";
+const backendPort = process.env.PLAYWRIGHT_BACKEND_PORT ?? "8001";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -17,9 +18,9 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: `${process.platform === "win32" ? ".venv\\Scripts\\python.exe" : "python"} -m uvicorn app.main:app --host 127.0.0.1 --port 8001`,
+      command: `${process.platform === "win32" ? ".venv\\Scripts\\python.exe" : "python"} -m uvicorn app.main:app --host 127.0.0.1 --port ${backendPort}`,
       cwd: "../backend",
-      url: "http://127.0.0.1:8001/health",
+      url: `http://127.0.0.1:${backendPort}/health`,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
       env: {
@@ -38,7 +39,7 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
       env: {
-        NEXT_PUBLIC_API_BASE_URL: "http://127.0.0.1:8001",
+        NEXT_PUBLIC_API_BASE_URL: `http://127.0.0.1:${backendPort}`,
         DEALGUARD_NEXT_DIST_DIR: `.next-e2e-${frontendPort}`,
       },
     },

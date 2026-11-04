@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import "../history.css";
 import { WorkspaceNav } from "../../components/WorkspaceNav";
-import { localizedDecision, localizedReason, localizedStatus, useLanguage } from "../../components/LanguageProvider";
+import { localizedDecision, localizedDecisionMessage, localizedReason, localizedStatus, localizedTraceMessage, useLanguage } from "../../components/LanguageProvider";
 import { RunAnalytics } from "../../components/RunAnalytics";
 
 type RunSummary = {
@@ -146,12 +146,12 @@ export default function RunsPage() {
               <article><span>{t("报价结果", "Quote result")}</span><strong>{detail.quote?.breakdown?.total ? money(detail.quote.breakdown.total) : t("未创建", "None")}</strong></article>
             </section>
             <div className="dg-trace-summary-grid">
-              {detail.decision && <section className="dg-trace-summary-card"><h3>{t("Guard 决策", "Guard decision")}</h3><strong>{localizedDecision(String(detail.decision.decision ?? ""), locale)}</strong><code>{String(detail.decision.reason_code ?? "")}</code>{detail.decision.human_message != null && <p>{String(detail.decision.human_message)}</p>}</section>}
+              {detail.decision && <section className="dg-trace-summary-card"><h3>{t("Guard 决策", "Guard decision")}</h3><strong>{localizedDecision(String(detail.decision.decision ?? ""), locale)}</strong><code>{localizedReason(String(detail.decision.reason_code ?? ""), locale)}</code>{detail.decision.human_message != null && <p>{localizedDecisionMessage(String(detail.decision.reason_code ?? ""), String(detail.decision.human_message), locale)}</p>}</section>}
               {detail.intent && <section className="dg-trace-summary-card"><h3>{t("识别意图", "Parsed intent")}</h3><dl>{Object.entries(detail.intent).filter(([key, value]) => key !== "customer_message" && value !== null && value !== "" && !(Array.isArray(value) && value.length === 0)).slice(0, 8).map(([key, value]) => <div key={key}><dt>{key.replaceAll("_", " ")}</dt><dd>{traceValue(value)}</dd></div>)}</dl></section>}
             </div>
             {detail.policy_evidence.length > 0 && <section className="dg-trace-evidence"><h3>{t("政策依据", "Policy evidence")}</h3>{detail.policy_evidence.map((item, index) => <article key={`${item.policy_id}-${item.version}-${index}`}><div><strong>{item.title || `${item.policy_id}@${item.version}`}</strong><code>{item.citation_ref || item.source || ""}</code></div><p>{item.citation}</p></article>)}</section>}
             <section className="dg-trace-timeline"><div className="dg-trace-section-heading"><h3>{t("执行轨迹", "Execution timeline")}</h3><span>{t("点击步骤查看事件详情", "Expand a step to inspect event data")}</span></div>
-              {detail.trace.length ? <ol>{detail.trace.map((event, index) => <li key={`${event.step}-${index}`} className={`dg-trace-event dg-trace-event-${event.status.toLowerCase()}`}><span className="dg-trace-step-marker">{index + 1}</span><details><summary><span><strong>{traceLabel(event.step, locale)}</strong><small>{event.message}</small></span><time>{event.timestamp ? new Date(event.timestamp).toLocaleTimeString(locale === "zh" ? "zh-CN" : "en-US") : ""}</time></summary>{event.details && Object.keys(event.details).length > 0 && <pre>{JSON.stringify(event.details, null, 2)}</pre>}</details></li>)}</ol> : <p className="dg-trace-empty">{t("此运行没有保存步骤事件。", "No trace events were saved for this run.")}</p>}
+              {detail.trace.length ? <ol>{detail.trace.map((event, index) => <li key={`${event.step}-${index}`} className={`dg-trace-event dg-trace-event-${event.status.toLowerCase()}`}><span className="dg-trace-step-marker">{index + 1}</span><details><summary><span><strong>{traceLabel(event.step, locale)}</strong><small>{localizedDecisionMessage(typeof event.details?.reason_code === "string" ? event.details.reason_code : null, localizedTraceMessage(event.message, locale), locale)}</small></span><time>{event.timestamp ? new Date(event.timestamp).toLocaleTimeString(locale === "zh" ? "zh-CN" : "en-US") : ""}</time></summary>{event.details && Object.keys(event.details).length > 0 && <pre>{JSON.stringify(event.details, null, 2)}</pre>}</details></li>)}</ol> : <p className="dg-trace-empty">{t("此运行没有保存步骤事件。", "No trace events were saved for this run.")}</p>}
             </section>
             <details className="dg-trace-raw"><summary>{t("查看完整运行数据 JSON", "View complete run JSON")}</summary><pre>{JSON.stringify(detail, null, 2)}</pre></details>
           </div>}

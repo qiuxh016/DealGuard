@@ -11,7 +11,7 @@ from app.services.policies import current_quote_policies
 
 def quote_response(row: QuoteDraft) -> QuoteDraftResponse:
     return QuoteDraftResponse(
-        id=row.id, status="DRAFT", customer_id=row.customer_id, product_id=row.product_id,
+        id=row.id, status=row.status, customer_id=row.customer_id, product_id=row.product_id,
         breakdown=QuoteBreakdown(
             currency=(row.lines or [{}])[0].get("currency", "USD"), unit_price=row.unit_price, quantity=row.quantity,
             discount_pct=row.discount_pct, subtotal=row.subtotal,
@@ -28,6 +28,8 @@ def update_quote(db: Session, actor: DemoActor, quote_id: str, body: QuoteUpdate
         raise HTTPException(status_code=404, detail={"code": "QUOTE_NOT_FOUND", "message": "Quote draft not found."})
     if not has_capability(actor, "quote.update_own") or row.owner_actor_id != actor.id or row.customer_id != actor.customer_id:
         raise HTTPException(status_code=403, detail={"code": "RESOURCE_NOT_OWNED", "message": "This account cannot update this quote."})
+    if row.status not in {"DRAFT", "REVISED"}:
+        raise HTTPException(status_code=409, detail={"code": "QUOTE_STATE_CONFLICT", "message": "Only an unpublished quote can be edited. Start a new revision for an issued quote."})
     if row.lines and len(row.lines) > 1:
         raise HTTPException(status_code=409, detail={"code": "MULTI_ITEM_UPDATE_UNSUPPORTED", "message": "Multi-item quote lines are immutable in this demo; create a new quote to change requested discounts."})
     product = db.query(Product).filter(Product.id == row.product_id, Product.tenant_id == actor.tenant_id).first()

@@ -161,6 +161,51 @@ class QuoteDraft(Base):
     tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), nullable=False, default="harborlight-demo")
 
 
+class QuoteRevision(Base):
+    __tablename__ = "quote_revisions"
+    __table_args__ = (UniqueConstraint("tenant_id", "quote_id", "version", name="uq_quote_revision_tenant_version"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), nullable=False, index=True)
+    quote_id: Mapped[str] = mapped_column(ForeignKey("quote_drafts.id"), nullable=False, index=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="ISSUED")
+    snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_by: Mapped[str] = mapped_column(ForeignKey("demo_actors.id"), nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class QuoteStatusEvent(Base):
+    __tablename__ = "quote_status_events"
+    __table_args__ = (UniqueConstraint("tenant_id", "quote_id", "idempotency_key", name="uq_quote_event_idempotency"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), nullable=False, index=True)
+    quote_id: Mapped[str] = mapped_column(ForeignKey("quote_drafts.id"), nullable=False, index=True)
+    revision_id: Mapped[str | None] = mapped_column(ForeignKey("quote_revisions.id"), nullable=True)
+    from_status: Mapped[str | None] = mapped_column(String, nullable=True)
+    to_status: Mapped[str] = mapped_column(String, nullable=False)
+    actor_id: Mapped[str | None] = mapped_column(ForeignKey("demo_actors.id"), nullable=True)
+    actor_type: Mapped[str] = mapped_column(String, nullable=False)
+    reason_code: Mapped[str] = mapped_column(String, nullable=False)
+    idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    details: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class QuoteAccessToken(Base):
+    __tablename__ = "quote_access_tokens"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), nullable=False, index=True)
+    revision_id: Mapped[str] = mapped_column(ForeignKey("quote_revisions.id"), nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
 class RunRecord(Base):
     __tablename__ = "runs"
     __table_args__ = (UniqueConstraint("tenant_id", "actor_id", "idempotency_key", name="uq_runs_tenant_actor_idempotency_key"),)

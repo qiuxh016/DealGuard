@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { WorkspaceNav } from "../../components/WorkspaceNav";
 import { ImageField } from "../../components/ImageField";
-import { useLanguage } from "../../components/LanguageProvider";
+import { localizedCustomerTier, useLanguage } from "../../components/LanguageProvider";
 import "../workspace.css";
 import "../operations.css";
 
@@ -15,12 +15,13 @@ type CustomerImportRow = { row_number: number; customer_id: string | null; name:
 type CustomerImportPreview = { filename: string | null; total_rows: number; valid_rows: number; invalid_rows: number; rows: CustomerImportRow[]; unmatched_images: string[] };
 
 export default function CustomersPage() {
-  const { t } = useLanguage();
+  const { locale, t } = useLanguage();
   const [role, setRole] = useState("");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [search, setSearch] = useState("");
   const [name, setName] = useState("");
   const [tier, setTier] = useState<Customer["tier"]>("Standard");
+  const [newCustomerImage, setNewCustomerImage] = useState<File | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -59,11 +60,24 @@ export default function CustomersPage() {
   async function addCustomer(event: FormEvent) {
     event.preventDefault(); setBusy(true); setNotice("");
     try {
+      if (newCustomerImage && newCustomerImage.size > 5 * 1024 * 1024) throw new Error(t("图片不能超过 5 MiB", "Image must be 5 MiB or smaller"));
       const response = await fetch(`${API}/api/v1/customers`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, tier }) });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload?.detail?.message ?? "添加客户失败");
-      setCustomers((current) => [...current, payload].sort((a, b) => a.name.localeCompare(b.name)));
-      setName(""); setTier("Standard"); setFormOpen(false); setNotice("客户已添加到当前工作区");
+      let savedCustomer = payload as Customer;
+      let imageError = "";
+      if (newCustomerImage) {
+        try {
+          const imageBody = new FormData(); imageBody.set("file", newCustomerImage);
+          const imageResponse = await fetch(`${API}/api/v1/customers/${encodeURIComponent(payload.id)}/image`, { method: "POST", credentials: "include", body: imageBody });
+          const imagePayload = await imageResponse.json();
+          if (!imageResponse.ok) throw new Error(imagePayload?.detail?.message ?? t("图片上传失败", "Image upload failed"));
+          savedCustomer = { ...savedCustomer, image_id: imagePayload.image_id };
+        } catch (error) { imageError = error instanceof Error ? error.message : t("图片上传失败", "Image upload failed"); }
+      }
+      setCustomers((current) => [...current, savedCustomer].sort((a, b) => a.name.localeCompare(b.name)));
+      setName(""); setTier("Standard"); setNewCustomerImage(null); setFormOpen(false);
+      setNotice(imageError ? t(`客户已创建，但图片上传失败：${imageError}`, `Customer created, but the image upload failed: ${imageError}`) : t("客户已添加到当前工作区", "Customer added to this workspace"));
     } catch (error) { setNotice(error instanceof Error ? error.message : "添加客户失败"); }
     finally { setBusy(false); }
   }
@@ -118,9 +132,9 @@ export default function CustomersPage() {
       <header className="dg-operations-head"><div><h1>{t("客户", "Customers")}</h1><p>{t("工作区客户资料与服务等级。销售账号仅能查看分配给自己的客户。", "Manage workspace customer profiles and tiers. Sales users can only see assigned customers.")}</p></div>{role === "admin" && <div className="dg-operations-actions"><button className="dg-operations-secondary" type="button" onClick={() => { setFormOpen(false); setImportOpen((open) => !open); }}>{importOpen ? t("关闭导入", "Close import") : t("批量导入", "Bulk import")}</button><button className="dg-operations-primary" type="button" onClick={() => { setImportOpen(false); setFormOpen((open) => !open); }}>{formOpen ? t("取消", "Cancel") : t("新增客户", "Add customer")}</button></div>}</header>
       {notice && <div className="dg-operations-notice" role="status">{notice} {(notice.startsWith("请先登录") || notice.startsWith("Sign in")) && <Link href="/">{t("返回登录", "Back to sign in")}</Link>}</div>}
       {formOpen && role === "admin" && <section className="dg-operations-panel" aria-label={t("新增客户表单", "Add customer form")}><form className="dg-operations-form" onSubmit={addCustomer}>
-        <p className="dg-image-help">{t("保存客户后，可在列表中上传或更换客户 Logo。支持 PNG、JPEG、WebP，最大 5 MiB。", "After saving, upload or replace a customer logo from the list. PNG, JPEG, and WebP up to 5 MiB.")}</p>
+        <label>{t("客户图片 / Logo（可选）", "Customer image / logo (optional)")}<input key={newCustomerImage?.name ?? "empty"} type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => setNewCustomerImage(event.target.files?.[0] ?? null)} /></label>
         <label className="dg-form-wide">{t("客户名称", "Customer name")}<input value={name} onChange={(event) => setName(event.target.value)} minLength={2} maxLength={160} placeholder={t("输入公司或客户名称", "Enter a company or customer name")} required /></label>
-        <label>{t("客户等级", "Customer tier")}<select value={tier} onChange={(event) => setTier(event.target.value as Customer["tier"])}><option value="Standard">Standard</option><option value="VIP">VIP</option></select></label>
+        <label>{t("客户等级", "Customer tier")}<select value={tier} onChange={(event) => setTier(event.target.value as Customer["tier"])}><option value="Standard">{localizedCustomerTier("Standard", locale)}</option><option value="VIP">VIP</option></select></label>
         <div className="dg-form-actions"><button className="dg-operations-secondary" type="button" onClick={() => setFormOpen(false)}>{t("取消", "Cancel")}</button><button className="dg-operations-primary" disabled={busy}>{busy ? t("正在保存…", "Saving…") : t("保存客户", "Save customer")}</button></div>
       </form></section>}
       {importOpen && role === "admin" && <section className="dg-operations-panel dg-product-import" aria-label={t("批量导入客户", "Bulk import customers")}>
@@ -138,9 +152,9 @@ export default function CustomersPage() {
         </div>}
       </section>}
       <div className="dg-operations-toolbar"><input className="dg-operations-search" aria-label={t("搜索客户", "Search customers")} placeholder={t("搜索客户名称或客户编号", "Search by customer name or ID")} value={search} onChange={(event) => setSearch(event.target.value)} /></div>
-      <section className="dg-tier-overview" aria-label={t("客户等级分布", "Customer tier distribution")}><div className="dg-tier-overview-head"><div><h2>{t("客户结构", "Customer mix")}</h2><p>{t("按工作区客户等级汇总", "Workspace customers by tier")}</p></div><strong>{customers.length}<small> {t("位客户", "customers")}</small></strong></div><div className="dg-tier-stack" role="img" aria-label={`${t("VIP", "VIP")} ${customers.filter((item) => item.tier === "VIP").length}, Standard ${customers.filter((item) => item.tier === "Standard").length}`}><i className="dg-tier-vip" style={{ width: `${customers.length ? customers.filter((item) => item.tier === "VIP").length / customers.length * 100 : 0}%` }} /><i className="dg-tier-standard" style={{ width: `${customers.length ? customers.filter((item) => item.tier === "Standard").length / customers.length * 100 : 0}%` }} /></div><div className="dg-tier-legend"><span><i className="dg-tier-dot-vip" />VIP <b>{customers.filter((item) => item.tier === "VIP").length}</b></span><span><i className="dg-tier-dot-standard" />Standard <b>{customers.filter((item) => item.tier === "Standard").length}</b></span></div></section>
+      <section className="dg-tier-overview" aria-label={t("客户等级分布", "Customer tier distribution")}><div className="dg-tier-overview-head"><div><h2>{t("客户结构", "Customer mix")}</h2><p>{t("按工作区客户等级汇总", "Workspace customers by tier")}</p></div><strong>{customers.length}<small> {t("位客户", "customers")}</small></strong></div><div className="dg-tier-stack" role="img" aria-label={`${t("VIP", "VIP")} ${customers.filter((item) => item.tier === "VIP").length}, ${localizedCustomerTier("Standard", locale)} ${customers.filter((item) => item.tier === "Standard").length}`}><i className="dg-tier-vip" style={{ width: `${customers.length ? customers.filter((item) => item.tier === "VIP").length / customers.length * 100 : 0}%` }} /><i className="dg-tier-standard" style={{ width: `${customers.length ? customers.filter((item) => item.tier === "Standard").length / customers.length * 100 : 0}%` }} /></div><div className="dg-tier-legend"><span><i className="dg-tier-dot-vip" />VIP <b>{customers.filter((item) => item.tier === "VIP").length}</b></span><span><i className="dg-tier-dot-standard" />{localizedCustomerTier("Standard", locale)} <b>{customers.filter((item) => item.tier === "Standard").length}</b></span></div></section>
       <section className="dg-operations-panel dg-catalog-panel"><div className="dg-quote-list-head"><strong>{t("客户列表", "Customers")}</strong><span>{visibleCustomers.length} {t("条", "items")}</span></div><div className="dg-quote-table-wrap"><table className="dg-catalog-table"><thead><tr><th>{t("客户编号", "Customer ID")}</th><th>{t("客户名称", "Customer")}</th><th>{t("图片", "Image")}</th><th>{t("客户等级", "Tier")}</th><th>{t("可用操作", "Actions")}</th></tr></thead><tbody>
-        {visibleCustomers.map((customer) => <tr key={customer.id}><td className="dg-catalog-code">{customer.id}</td><td><strong>{customer.name}</strong></td><td><ImageField imageId={customer.image_id ?? null} alt={`${customer.name} logo`} label={t("上传客户 Logo", "Upload customer logo")} uploadPath={`/api/v1/customers/${encodeURIComponent(customer.id)}/image`} removePath={`/api/v1/customers/${encodeURIComponent(customer.id)}/image`} editable={role === "admin"} onChange={(imageId) => setCustomers((current) => current.map((item) => item.id === customer.id ? { ...item, image_id: imageId } : item))} /></td><td>{customer.tier}</td><td><button type="button" className="dg-operations-secondary" onClick={() => { window.location.href = `/?customer=${encodeURIComponent(customer.id)}`; }}>{t("创建询盘", "Start inquiry")}</button></td></tr>)}
+        {visibleCustomers.map((customer) => <tr key={customer.id}><td className="dg-catalog-code">{customer.id}</td><td><strong>{customer.name}</strong></td><td><ImageField imageId={customer.image_id ?? null} alt={`${customer.name} logo`} label={t("上传客户 Logo", "Upload customer logo")} uploadPath={`/api/v1/customers/${encodeURIComponent(customer.id)}/image`} removePath={`/api/v1/customers/${encodeURIComponent(customer.id)}/image`} editable={role === "admin"} onChange={(imageId) => setCustomers((current) => current.map((item) => item.id === customer.id ? { ...item, image_id: imageId } : item))} /></td><td>{localizedCustomerTier(customer.tier, locale)}</td><td><button type="button" className="dg-operations-secondary" onClick={() => { window.location.href = `/?customer=${encodeURIComponent(customer.id)}`; }}>{t("创建询盘", "Start inquiry")}</button></td></tr>)}
       </tbody></table>{!visibleCustomers.length && <div className="dg-operations-empty">{t("没有匹配客户。", "No matching customers.")}{role === "admin" ? t("可添加客户后再创建询盘。", " Add a customer before starting an inquiry.") : t("请联系管理员维护客户资料。", " Contact an administrator to manage customer records.")}</div>}</div></section>
     </main>
   </div>;

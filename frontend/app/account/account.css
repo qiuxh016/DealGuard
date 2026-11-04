@@ -14,6 +14,7 @@
 .dg-account-facts span { color: #718097; }.dg-account-facts strong { color: #263650; }
 .dg-account-security-note { margin: -4px 0 0; color: #718097; font-size: 11px; }
 .dg-account-team { margin-top: 16px; }
+.dg-account-admin-contact { grid-template-columns: minmax(180px, 1fr); }
 .dg-account-invite { display: grid; grid-template-columns: minmax(180px, 1.5fr) minmax(130px, .8fr) minmax(160px, 1fr) auto; align-items: end; gap: 12px; padding: 16px; border: 1px solid #e3e8f0; border-radius: 11px; background: #fafbfc; }
 .dg-account-member-list { margin-top: 16px; border-top: 1px solid #e5eaf1; }
 .dg-account-member { display: grid; grid-template-columns: minmax(180px, 1fr) 90px auto; align-items: center; gap: 14px; padding: 15px 4px; border-bottom: 1px solid #e9edf3; }

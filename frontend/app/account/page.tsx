@@ -13,6 +13,7 @@ const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 type Profile = { actor_id: string; display_name: string; role: string; tenant_id: string; email: string | null; workspace_name: string | null; image_id: string | null };
 type Customer = { id: string; name: string; tier: string };
 type Member = { actor_id: string; display_name: string; email: string; role: string; customer_id: string | null; is_active: boolean };
+type WorkspaceAdmin = { display_name: string; email: string };
 type Invitation = { id: string; email: string; role: string; customer_id: string | null; expires_at: string; expired: boolean };
 type ApiError = { detail?: { message?: string } | string };
 
@@ -33,6 +34,7 @@ export default function AccountPage() {
   const [displayName, setDisplayName] = useState("");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
+  const [workspaceAdmins, setWorkspaceAdmins] = useState<WorkspaceAdmin[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"sales" | "manager">("sales");
@@ -57,6 +59,7 @@ export default function AccountPage() {
     void api<Profile>("/api/v1/auth/me").then(async (result) => {
       setProfile(result); setDisplayName(result.display_name);
       if (result.role === "admin") await loadTeam();
+      else setWorkspaceAdmins(await api<WorkspaceAdmin[]>("/api/v1/auth/workspace-admins"));
     }).catch((error: unknown) => setNotice(error instanceof Error ? error.message : "无法读取账户信息"));
   }, []);
 
@@ -160,6 +163,13 @@ export default function AccountPage() {
             </form>
           </section>
         </div>
+
+        {profile.role !== "admin" && <section className="dg-operations-panel dg-account-team">
+          <div className="dg-account-panel-head"><div><h2>{t("工作区管理员", "Workspace administrators")}</h2><p>{t("如需更换邮箱、调整客户归属或处理工作区设置，请联系以下管理员。", "Contact an administrator for account changes, customer assignment updates, or workspace settings.")}</p></div></div>
+          {workspaceAdmins.length ? <div className="dg-account-member-list">{workspaceAdmins.map((admin) => <article className="dg-account-member dg-account-admin-contact" key={admin.email}>
+            <div className="dg-account-member-info"><strong>{admin.display_name}</strong><span>{admin.email}</span><small>{roleName("admin")}</small></div>
+          </article>)}</div> : <p className="dg-account-security-note">{t("当前工作区暂未配置可用管理员。", "No active workspace administrator is configured.")}</p>}
+        </section>}
 
         {profile.role === "admin" && <section className="dg-operations-panel dg-account-team">
           <div className="dg-account-panel-head"><div><h2>{t("团队成员", "Team members")}</h2><p>{t(`${members.length} 位成员 · 管理邀请、账号状态与密码重置`, `${members.length} members · Manage invitations, account status, and password resets`)}</p></div></div>

@@ -221,6 +221,17 @@ def list_members(actor: DemoActor = Depends(get_current_actor), db: Session = De
             for member, account in rows]
 
 
+@router.get("/workspace-admins")
+def list_workspace_admins(actor: DemoActor = Depends(get_current_actor), db: Session = Depends(get_db)):
+    rows = db.execute(select(DemoActor, AuthAccount).join(AuthAccount, AuthAccount.actor_id == DemoActor.id).where(
+        DemoActor.tenant_id == actor.tenant_id,
+        DemoActor.role == "admin",
+        AuthAccount.is_active.is_(True),
+    ).order_by(DemoActor.display_name)).all()
+    return [{"display_name": member.display_name, "email": account.email}
+            for member, account in rows]
+
+
 @router.patch("/members/{member_id}")
 def update_member_status(member_id: str, body: MemberStatusUpdate,
                          actor: DemoActor = Depends(get_current_actor), db: Session = Depends(get_db)):

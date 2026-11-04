@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-const API = "http://127.0.0.1:8001";
+const API = `http://127.0.0.1:${process.env.PLAYWRIGHT_BACKEND_PORT ?? "8001"}`;
 
 async function registerAdmin(page: Page) {
   const suffix = Date.now().toString().slice(-8);

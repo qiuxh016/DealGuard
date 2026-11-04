@@ -131,7 +131,7 @@ def process_approval(db: Session, actor: DemoActor, approval_id: str, approve: b
                     break
                 elif breakdown is None:
                     breakdown = calculate_breakdown(product, proposal.quantity, proposal.requested_discount_pct)
-                current_product_keys[product.sku] = product.internal_id
+                current_product_keys[product.id] = product.internal_id
                 provenance = quote_provenance(current, decision, guard_checks, saved.get("policy_provenance", {}).get("citation"), saved.get("policy_provenance", {}).get("citation_ref"), saved.get("policy_provenance", {}).get("chunk_id"))
                 current_lines.append({"product_id": product.id, "product_name": product.name, "currency": product.currency, "quantity": proposal.quantity, "unit_price": str(product.unit_price), "discount_pct": str(proposal.requested_discount_pct), "subtotal": str(breakdown.subtotal), "discount_amount": str(breakdown.discount_amount), "total": str(breakdown.total), "policy_id": current.policy_id, "policy_version": current.version, "policy_source": current.source, "policy_scope": current.policy_scope, "available_stock": product.stock, "inventory_checked_at": now.isoformat(), **provenance})
         if not stale_code:

@@ -424,14 +424,17 @@ body.dg-design-system .dg-selected-customer small { color: #75839a; font-size: 1
 .dg-handbook-features strong { color: #314c83; font-size: 11px; }
 .dg-handbook-features small { color: #78879b; font-size: 10px; line-height: 1.4; }
 .dg-handbook-features b { flex: 0 0 auto; color: #8292a9; font-size: 14px; }
-.dg-handbook-demo { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; border: 1px solid #d7e2f1; border-radius: 11px; background: linear-gradient(120deg, #f5f8ff, #f8fbff); padding: 11px; }
-.dg-handbook-demo > div { display: grid; gap: 4px; min-width: 0; }
-.dg-handbook-demo > div > span { color: #72819a; font-size: 9px; }
+.dg-handbook-demo { display: grid; gap: 10px; margin-top: 12px; border: 1px solid #d7e2f1; border-radius: 11px; background: linear-gradient(120deg, #f5f8ff, #f8fbff); padding: 11px; }
+.dg-handbook-accounts { display: grid; gap: 10px; min-width: 0; }
+.dg-handbook-account { display: grid; gap: 4px; min-width: 0; }
+.dg-handbook-account + .dg-handbook-account { border-top: 1px solid #e3eaf4; padding-top: 9px; }
+.dg-handbook-account > span { color: #72819a; font-size: 9px; }
 .dg-handbook-demo strong { color: #283f66; font-size: 11px; overflow-wrap: anywhere; }
 .dg-handbook-demo code { color: #617493; font-size: 10px; user-select: all; }
-.dg-handbook-demo button { flex: 0 0 auto; min-height: 32px; border: 1px solid #cfdaec; border-radius: 8px; background: #fff; padding: 0 9px; color: #3d588d; font-size: 9px; font-weight: 700; cursor: pointer; }
+.dg-handbook-account small { color: #8996a9; font-size: 9px; }
+.dg-handbook-demo button { justify-self: start; min-height: 32px; border: 1px solid #cfdaec; border-radius: 8px; background: #fff; padding: 0 9px; color: #3d588d; font-size: 9px; font-weight: 700; cursor: pointer; }
 .dg-handbook-demo-note { margin: 8px 1px 0; color: #929daf; font-size: 9px; line-height: 1.45; }
-@media (max-width: 520px) { .dg-handbook-widget { right: 14px; bottom: 14px; } .dg-handbook-launcher { width: 52px; height: 52px; } .dg-handbook-panel { bottom: 64px; max-height: calc(100dvh - 94px); } .dg-handbook-demo { align-items: flex-start; flex-direction: column; } }
+@media (max-width: 520px) { .dg-handbook-widget { right: 14px; bottom: 14px; } .dg-handbook-launcher { width: 52px; height: 52px; } .dg-handbook-panel { bottom: 64px; max-height: calc(100dvh - 94px); } }
 @media (prefers-reduced-motion: reduce) { .dg-handbook-launcher, .dg-handbook-panel { animation: none; } .dg-handbook-features a, .dg-handbook-launcher { transition: none; } }
 @media (max-width: 520px) {
   body.dg-design-system .dg-workspace-session > .dg-workspace-user { max-width: 34px; }

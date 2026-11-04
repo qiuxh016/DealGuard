@@ -26,6 +26,7 @@ BILINGUAL_POLICY_TERMS = {
     "大宗采购": "wholesale bulk purchase",
     "采购": "purchase order",
     "价格减让": "discount concession",
+    "折扣": "discount rebate price reduction",
     "提前付款": "prepay upfront early payment",
     "预付款": "prepay upfront payment",
     "及时结款": "prompt payment settle",

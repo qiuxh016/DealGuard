@@ -28,7 +28,7 @@ export function GettingStartedWidget() {
 
   async function copyCredentials() {
     try {
-      await navigator.clipboard.writeText("邮箱：demo@dealguard.local\n密码：DealGuard-Showcase-2026!");
+      await navigator.clipboard.writeText("管理员账号\n邮箱：demo@dealguard.local\n密码：DealGuard-Showcase-2026!\n\n经理账号\n邮箱：manager@dealguard.local\n密码：DealGuard-Manager-2026!\n\n销售账号\n邮箱：sales@dealguard.local\n密码：DealGuard-Sales-2026!\n负责客户：BluePeak Distribution（DG-C-005）");
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1800);
     } catch { setCopied(false); }
@@ -42,7 +42,11 @@ export function GettingStartedWidget() {
         <nav className="dg-handbook-features" aria-label={t("功能介绍", "Feature guide")}>
           {features.map((feature) => <Link href={feature.href} key={feature.href} onClick={() => setOpen(false)}><span><strong>{t(feature.zh, feature.en)}</strong><small>{t(feature.copyZh, feature.copyEn)}</small></span><b aria-hidden="true">↗</b></Link>)}
         </nav>
-        <section className="dg-handbook-demo"><div><span>{t("比赛演示账号", "Showcase account")}</span><strong>demo@dealguard.local</strong><code>DealGuard-Showcase-2026!</code></div><button type="button" onClick={() => void copyCredentials()}>{copied ? t("已复制", "Copied") : t("复制账号信息", "Copy credentials")}</button></section>
+        <section className="dg-handbook-demo"><div className="dg-handbook-accounts">
+          <div className="dg-handbook-account"><span>{t("管理员账号", "Administrator account")}</span><strong>demo@dealguard.local</strong><code>DealGuard-Showcase-2026!</code></div>
+          <div className="dg-handbook-account"><span>{t("经理账号 · 审批与团队数据查看", "Manager account · approvals and team data")}</span><strong>manager@dealguard.local</strong><code>DealGuard-Manager-2026!</code></div>
+          <div className="dg-handbook-account"><span>{t("销售账号 · 负责 BluePeak Distribution", "Sales account · BluePeak Distribution")}</span><strong>sales@dealguard.local</strong><code>DealGuard-Sales-2026!</code><small>DG-C-005</small></div>
+        </div><button type="button" onClick={() => void copyCredentials()}>{copied ? t("已复制", "Copied") : t("复制全部账号", "Copy all credentials")}</button></section>
         <p className="dg-handbook-demo-note">{t("该账号用于功能演示。请勿在此账号中存放真实业务或敏感数据。", "This account is for showcasing the product. Do not store real business or sensitive data in it.")}</p>
       </div>
     </section>}

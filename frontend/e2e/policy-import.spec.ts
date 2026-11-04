@@ -30,7 +30,7 @@ test("admin previews and imports policy spreadsheet rows as pending drafts", asy
   await expect(page.getByText("已导入 1 条待审核政策草稿。政策尚未激活。")).toBeVisible();
   await expect(page.getByText("E2E-IMPORT@v1")).toBeVisible();
   await page.getByRole("button", { name: "审核草稿" }).click();
-  await expect(page.getByRole("heading", { name: "E2E-IMPORT@v1 · draft" })).toBeVisible();
+  await expect(page.getByTestId("policy-draft-heading")).toContainText("E2E-IMPORT@v1");
 });
 
 test("AI policy extraction is reviewable and saves only a draft", async ({ page }) => {
@@ -59,5 +59,5 @@ test("AI policy extraction is reviewable and saves only a draft", async ({ page 
   await page.getByRole("checkbox", { name: "我已对照政策原文核对识别结果" }).check();
   await page.getByRole("button", { name: "确认并保存为待审核草稿" }).click();
   await expect(page.getByText("E2E-EXTRACT@v1")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "E2E-EXTRACT@v1 · draft" })).toBeVisible();
+  await expect(page.getByTestId("policy-draft-heading")).toContainText("E2E-EXTRACT@v1");
 });

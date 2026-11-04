@@ -22,6 +22,7 @@ export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [search, setSearch] = useState("");
   const [form, setForm] = useState(initialForm);
+  const [newProductImage, setNewProductImage] = useState<File | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -60,11 +61,24 @@ export default function ProductsPage() {
   async function addProduct(event: FormEvent) {
     event.preventDefault(); setBusy(true); setNotice("");
     try {
+      if (newProductImage && newProductImage.size > 5 * 1024 * 1024) throw new Error(t("图片不能超过 5 MiB", "Image must be 5 MiB or smaller"));
       const response = await fetch(`${API}/api/v1/products`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, id: form.id.trim().toUpperCase(), unit_price: form.unit_price, stock: Number(form.stock) }) });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload?.detail?.message ?? "添加商品失败");
-      setProducts((current) => [...current, payload].sort((a, b) => a.id.localeCompare(b.id)));
-      setForm(initialForm); setFormOpen(false); setNotice("商品已添加到当前工作区");
+      let savedProduct = payload as Product;
+      let imageError = "";
+      if (newProductImage) {
+        try {
+          const imageBody = new FormData(); imageBody.set("file", newProductImage);
+          const imageResponse = await fetch(`${API}/api/v1/products/${encodeURIComponent(payload.id)}/image`, { method: "POST", credentials: "include", body: imageBody });
+          const imagePayload = await imageResponse.json();
+          if (!imageResponse.ok) throw new Error(imagePayload?.detail?.message ?? t("图片上传失败", "Image upload failed"));
+          savedProduct = { ...savedProduct, image_id: imagePayload.image_id };
+        } catch (error) { imageError = error instanceof Error ? error.message : t("图片上传失败", "Image upload failed"); }
+      }
+      setProducts((current) => [...current, savedProduct].sort((a, b) => a.id.localeCompare(b.id)));
+      setForm(initialForm); setNewProductImage(null); setFormOpen(false);
+      setNotice(imageError ? t(`商品已创建，但图片上传失败：${imageError}`, `Product created, but the image upload failed: ${imageError}`) : t("商品已添加到当前工作区", "Product added to this workspace"));
     } catch (error) { setNotice(error instanceof Error ? error.message : "添加商品失败"); }
     finally { setBusy(false); }
   }
@@ -126,7 +140,7 @@ export default function ProductsPage() {
           <button className="dg-operations-primary" type="submit" disabled={busy || !importFile}>{busy ? t("正在校验…", "Validating…") : t("预览并校验", "Preview and validate")}</button>
         </form>
         {importPreview && <div className="dg-product-import-preview">
-          <div className="dg-product-import-summary"><strong>{importPreview.filename}</strong><span>{t(`共 ${importPreview.total_rows} 行`, `${importPreview.total_rows} rows`)}</span><span className="dg-import-valid">{t("可导入", "Valid")}: {importPreview.valid_rows}</span><span className={importPreview.invalid_rows ? "dg-import-invalid" : "dg-import-valid"}>{t("需修正", "Needs correction")}: {importPreview.invalid_rows}</span></div>
+          <div className="dg-product-import-summary"><strong>{importPreview.filename}</strong><span>{t(`共 ${importPreview.total_rows} 行`, `${importPreview.total_rows} rows`)}</span><span data-testid="product-import-valid-rows" className="dg-import-valid">{t("可导入", "Valid")}: {importPreview.valid_rows}</span><span className={importPreview.invalid_rows ? "dg-import-invalid" : "dg-import-valid"}>{t("需修正", "Needs correction")}: {importPreview.invalid_rows}</span></div>
           {importPreview.unmatched_images.length > 0 && <p className="dg-product-import-warning">{t("这些图片未匹配到可导入的 SKU，将被忽略：", "These images do not match an importable SKU and will be ignored: ")}{importPreview.unmatched_images.join(", ")}</p>}
           {importPreview.rows.length > 0 ? <div className="dg-quote-table-wrap"><table className="dg-product-import-table"><thead><tr><th>行</th><th>SKU</th><th>名称</th><th>币种</th><th>单价</th><th>库存</th><th>{t("图片", "Image")}</th><th>{t("校验", "Validation")}</th></tr></thead><tbody>{importPreview.rows.slice(0, 50).map((row) => <tr key={row.row_number}><td>{row.row_number}</td><td>{row.sku ?? "—"}</td><td>{row.name ?? "—"}</td><td>{row.currency ?? "—"}</td><td>{row.unit_price ?? "—"}</td><td>{row.stock ?? "—"}</td><td>{row.image_filename ? <span className="dg-import-image-cell">{imagePreviews[row.image_filename] && <Image src={imagePreviews[row.image_filename]} width={38} height={38} unoptimized alt="" />}{row.image_filename}</span> : "—"}</td><td>{row.errors.length ? <span className="dg-import-invalid">{row.errors.join(" ")}</span> : <span className="dg-import-valid">{t("通过", "Valid")}</span>}</td></tr>)}</tbody></table>{importPreview.rows.length > 50 && <p className="dg-product-import-more">{t("仅显示前 50 行，确认时会提交并重新校验完整文件。", "Showing the first 50 rows. The full file will be validated again on import.")}</p>}</div> : <p className="dg-product-import-more">{t("文件中没有商品数据行。", "The file contains no product rows.")}</p>}
           {importPreview.invalid_rows > 0 && <p className="dg-product-import-warning">存在错误时整批不会导入。请修正表格后重新选择并预览。</p>}
@@ -134,7 +148,7 @@ export default function ProductsPage() {
         </div>}
       </section>}
       {formOpen && role === "admin" && <section className="dg-operations-panel" aria-label="新增商品表单"><form className="dg-operations-form" onSubmit={addProduct}>
-        <p className="dg-image-help">{t("保存商品后，可在列表中上传或更换商品图片。支持 PNG、JPEG、WebP，最大 5 MiB。", "After saving, upload or replace a product image from the list. PNG, JPEG, and WebP up to 5 MiB.")}</p>
+        <label>{t("商品图片（可选）", "Product image (optional)")}<input key={newProductImage?.name ?? "empty"} type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => setNewProductImage(event.target.files?.[0] ?? null)} /></label>
         <label>{t("商品编号", "SKU")}<input value={form.id} onChange={(event) => setForm((current) => ({ ...current, id: event.target.value.toUpperCase() }))} pattern="[A-Za-z0-9_-]+" minLength={2} maxLength={80} placeholder={t("例如 P-200", "e.g. P-200")} required /></label>
         <label>{t("商品名称", "Product name")}<input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} minLength={2} maxLength={160} placeholder={t("输入商品名称", "Enter a product name")} required /></label>
         <label>{t("币种", "Currency")}<select value={form.currency} onChange={(event) => setForm((current) => ({ ...current, currency: event.target.value }))}><option value="USD">USD</option><option value="CNY">CNY</option><option value="EUR">EUR</option></select></label>

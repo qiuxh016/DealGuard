@@ -61,7 +61,7 @@
 .dg-trace-dialog pre { min-height: 0; overflow: auto; margin: 0; border-radius: 7px; background: #f5f8f9; padding: 14px; color: #304d59; font: 11px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .dg-trace-state, .dg-trace-error { margin: 0; align-self: center; text-align: center; color: #637a85; font-size: 14px; }
 .dg-trace-error { color: #a1433d; }
-.dg-trace-content { min-height: 0; overflow: auto; display: grid; align-content: start; gap: 15px; padding-right: 3px; }
+.dg-trace-dialog .dg-trace-content { min-height: 0; overflow: auto; display: grid; align-content: start; gap: 15px; padding-right: 3px; }
 .dg-trace-overview { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; }
 .dg-trace-overview article { display: grid; gap: 5px; min-width: 0; border: 1px solid #e2e9f1; border-radius: 9px; background: #f8fafd; padding: 10px 12px; }
 .dg-trace-overview article > span { color: #7d8b9e; font-size: 10px; }

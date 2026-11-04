@@ -26,7 +26,7 @@ test("workspace admin previews and imports a valid product CSV", async ({ page }
     buffer: Buffer.from("sku,name,currency,unit_price,stock\nP-E2E-IMPORT,Imported Pump,USD,24.50,35\n"),
   });
   await page.getByRole("button", { name: "预览并校验" }).click();
-  await expect(page.getByText("可导入 1", { exact: false })).toBeVisible();
+  await expect(page.getByTestId("product-import-valid-rows")).toContainText("1");
   await page.getByRole("button", { name: "确认导入 1 件商品" }).click();
   await expect(page.getByText("已导入 1 件商品。")).toBeVisible();
   await expect(page.getByRole("cell", { name: "P-E2E-IMPORT" })).toBeVisible();

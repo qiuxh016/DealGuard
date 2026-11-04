@@ -1,0 +1,11 @@
+{$DOMAIN} {
+	encode zstd gzip
+
+	@api path /api/*
+	reverse_proxy @api api:8000
+
+	@health path /health
+	reverse_proxy @health api:8000
+
+	reverse_proxy frontend:3001
+}

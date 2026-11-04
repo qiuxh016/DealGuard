@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import "../history.css";
 import { WorkspaceNav } from "../../components/WorkspaceNav";
-import { useLanguage } from "../../components/LanguageProvider";
+import { localizedAuditAction, localizedReason, localizedStatus, useLanguage } from "../../components/LanguageProvider";
 
 type AuditEvent = { id: string; actor_id: string; action: string; outcome: string; reason_code: string | null; policy_id: string | null; version: string | null; created_at: string };
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
@@ -66,7 +66,7 @@ export default function AuditPage() {
       </form>
       {notice && <p className="dg-history-notice" role="status">{notice}</p>}
       <div className="dg-history-table-wrap"><table className="dg-history-table"><thead><tr><th>{t("时间", "Time")}</th><th>{t("操作者", "Actor")}</th><th>{t("动作", "Action")}</th><th>{t("结果", "Outcome")}</th><th>{t("原因码", "Reason code")}</th><th>{t("政策版本", "Policy version")}</th></tr></thead><tbody>
-        {rows.map((row) => <tr key={row.id}><td>{new Date(row.created_at).toLocaleString(locale === "zh" ? "zh-CN" : "en-US")}</td><td>{row.actor_id}</td><td>{row.action}</td><td>{row.outcome === "SUCCESS" ? t("成功", "Success") : row.outcome === "DENIED" ? t("拒绝", "Denied") : row.outcome}</td><td>{row.reason_code ?? "—"}</td><td>{row.policy_id ? `${row.policy_id}@${row.version ?? "—"}` : "—"}</td></tr>)}
+        {rows.map((row) => <tr key={row.id}><td>{new Date(row.created_at).toLocaleString(locale === "zh" ? "zh-CN" : "en-US")}</td><td>{row.actor_id}</td><td>{localizedAuditAction(row.action, locale)}</td><td>{localizedStatus(row.outcome, locale)}</td><td>{localizedReason(row.reason_code, locale)}</td><td>{row.policy_id ? `${row.policy_id}@${row.version ?? "—"}` : "—"}</td></tr>)}
       </tbody></table>{rows.length === 0 && <div className="dg-history-empty">{t("没有匹配的政策审计记录。此页面仅管理员可读。", "No matching audit events. This page is available to administrators only.")}</div>}</div>
     </section>
   </div></main></>;
