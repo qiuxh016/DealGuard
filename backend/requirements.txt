@@ -5,6 +5,7 @@ sqlalchemy>=2.0,<3.0
 psycopg[binary]>=3.2,<4.0
 alembic>=1.13,<2.0
 python-multipart>=0.0.9,<1.0
+openpyxl>=3.1,<4.0
 langgraph>=0.2,<2.0
 langchain-openai>=0.2,<2.0
 chromadb>=0.5,<2.0

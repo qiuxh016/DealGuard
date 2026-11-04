@@ -1,9 +1,10 @@
 from app.core.config import settings
 from datetime import datetime, timedelta, timezone
+from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app.db.models import AuthAccount, AuthSession, Policy, Tenant
-from app.services.actors import hash_password
+from app.services.actors import hash_password, issue_session
 
 
 def test_login_cookie_session_and_logout(client, monkeypatch):
@@ -41,6 +42,39 @@ def test_registration_creates_isolated_workspace_admin_and_session(client):
         assert account.password_hash != "a-secure-password-123"
         assert db.get(Tenant, actor["tenant_id"]).name == "Northwind Trading"
         assert db.scalar(select(Policy).where(Policy.tenant_id == actor["tenant_id"])) is None
+
+
+def test_profile_update_and_password_change_rotate_sessions(client):
+    registered = client.post("/api/v1/auth/register", json={
+        "organization_name": "Northwind Trading", "display_name": "Alex Morgan",
+        "email": "alex@northwind.example", "password": "a-secure-password-123",
+    })
+    assert registered.status_code == 201
+    profile = client.get("/api/v1/auth/me")
+    assert profile.json()["email"] == "alex@northwind.example"
+    assert profile.json()["workspace_name"] == "Northwind Trading"
+
+    renamed = client.patch("/api/v1/auth/me", json={"display_name": "Alex Morgan Jr."})
+    assert renamed.status_code == 200
+    assert client.get("/api/v1/auth/me").json()["display_name"] == "Alex Morgan Jr."
+
+    wrong_password = client.post("/api/v1/auth/change-password", json={
+        "current_password": "incorrect-password", "new_password": "another-secure-password-456",
+    })
+    assert wrong_password.status_code == 400
+    assert wrong_password.json()["detail"]["code"] == "CURRENT_PASSWORD_INVALID"
+
+    with client.app.state.session_factory() as db:
+        old_token, _ = issue_session(db, registered.json()["actor_id"])
+    changed = client.post("/api/v1/auth/change-password", json={
+        "current_password": "a-secure-password-123", "new_password": "another-secure-password-456",
+    })
+    assert changed.status_code == 200, changed.text
+    assert client.get("/api/v1/auth/me").status_code == 200
+    with TestClient(client.app, cookies={"dealguard_session": old_token}) as old_session_client:
+        assert old_session_client.get("/api/v1/auth/me").status_code == 401
+    assert client.post("/api/v1/auth/login", json={"email": "alex@northwind.example", "password": "a-secure-password-123"}).status_code == 401
+    assert client.post("/api/v1/auth/login", json={"email": "alex@northwind.example", "password": "another-secure-password-456"}).status_code == 200
 
 
 def test_registration_rejects_duplicate_email_and_client_role(client):

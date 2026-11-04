@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { BrandMark } from "../../components/BrandMark";
 import "../workspace.css";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
@@ -38,7 +39,7 @@ export default function ResetPasswordPage() {
   }
 
   return <main className="dg-app dg-login-shell"><section className="dg-login-card">
-    <div className="dg-brand-mark" aria-hidden="true">D</div>
+    <div className="dg-brand-mark"><BrandMark /></div>
     <h1>重置 DealGuard 密码</h1>
     <p>设置至少 12 个字符的新密码。重置后所有现有会话会失效。</p>
     {!token ? <div className="dg-login-form"><p role="status">重置链接无效或已过期，请联系工作区管理员重新生成。</p><Link href="/">返回登录</Link></div> : <form onSubmit={submit} className="dg-login-form">

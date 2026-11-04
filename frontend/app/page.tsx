@@ -2,6 +2,8 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { BrandMark } from "../components/BrandMark";
+import { WorkspaceNav } from "../components/WorkspaceNav";
 import "./workspace.css";
 
 type Actor = string;
@@ -12,9 +14,9 @@ type Policy = {
   max_discount_pct: string | null; review_max_discount_pct: string | null; exception_approval_allowed: boolean; source: string;
 };
 type Approval = { id: string; run_id: string; applicant_actor_id: string; customer_id: string; product_id: string; quantity: number; discount_pct: string; policy_id: string; policy_version: string; state: string };
-type WorkspaceMember = { actor_id: string; display_name: string; email: string | null; role: string; customer_id: string | null; is_active: boolean };
-type WorkspaceInvitation = { id: string; email: string; role: string; customer_id: string | null; expires_at: string; expired: boolean };
-type PolicyDraft = { id: string; policy_id: string; version: string; title: string; source: string; action_type: "quote_discount" | "reference_only" | null; policy_scope: PolicyScope; scope_product_id: string | null; customer_tier: "VIP" | "Standard"; max_discount_pct: string | null; review_max_discount_pct: string | null; exception_approval_allowed: boolean; status: string };
+type PolicyDraft = { id: string; policy_id: string; version: string; title: string; source?: string; action_type: "quote_discount" | "reference_only" | null; policy_scope: PolicyScope; scope_product_id: string | null; customer_tier: "VIP" | "Standard"; max_discount_pct: string | null; review_max_discount_pct: string | null; exception_approval_allowed: boolean; status: string };
+type PolicyExtraction = { filename: string; source: string; fields: { title: string | null; action_type: "quote_discount" | "reference_only" | null; policy_scope: PolicyScope | null; scope_product_id: string | null; customer_tier: "VIP" | "Standard" | null; max_discount_pct: string | null; review_max_discount_pct: string | null; exception_approval_allowed: boolean | null; supporting_evidence: string[]; uncertain_fields: string[] } };
+type PolicyImportPreview = { filename: string; total_rows: number; valid_rows: number; invalid_rows: number; rows: { row_number: number; policy_id: string | null; version: string | null; title: string | null; action_type: string | null; policy_scope: string; customer_tier: string; errors: string[] }[] };
 type PolicyDiffSide = { version: string; decision: { decision: string; reason_code: string }; breakdown?: { total: string } | null; lines?: { product_id: string; decision: { decision: string; reason_code: string }; breakdown?: { total: string } | null }[] };
 type RunResult = {
   run_id: string; status: "completed" | "needs_input" | "failed"; execution_mode: "llm" | "demo";
@@ -78,16 +80,6 @@ export default function HomePage() {
   const [customers, setCustomers] = useState<{ id: string; name: string; tier: "VIP" | "Standard" }[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [products, setProducts] = useState<{ id: string; name: string; currency: string; unit_price: string; stock: number }[]>([]);
-  const [members, setMembers] = useState<WorkspaceMember[]>([]);
-  const [invitations, setInvitations] = useState<WorkspaceInvitation[]>([]);
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<"sales" | "manager">("sales");
-  const [inviteCustomerId, setInviteCustomerId] = useState("");
-  const [invitationLink, setInvitationLink] = useState("");
-  const [passwordResetLink, setPasswordResetLink] = useState("");
-  const [newCustomerName, setNewCustomerName] = useState("");
-  const [newCustomerTier, setNewCustomerTier] = useState<"VIP" | "Standard">("Standard");
-  const [newProduct, setNewProduct] = useState({ id: "", name: "", currency: "USD", unit_price: "", stock: "" });
   const [result, setResult] = useState<RunResult | null>(null);
   const [selectedTrace, setSelectedTrace] = useState<number | null>(null);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
@@ -95,7 +87,12 @@ export default function HomePage() {
   const [notice, setNotice] = useState("");
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [policyDraft, setPolicyDraft] = useState<PolicyDraft | null>(null);
+  const [policyDrafts, setPolicyDrafts] = useState<PolicyDraft[]>([]);
   const [draftFile, setDraftFile] = useState<File | null>(null);
+  const [policyExtraction, setPolicyExtraction] = useState<PolicyExtraction | null>(null);
+  const [extractionReviewed, setExtractionReviewed] = useState(false);
+  const [policyImportFile, setPolicyImportFile] = useState<File | null>(null);
+  const [policyImportPreview, setPolicyImportPreview] = useState<PolicyImportPreview | null>(null);
   const [draftPolicyId, setDraftPolicyId] = useState("DISCOUNT-02");
   const [draftVersion, setDraftVersion] = useState("v1");
   const [draftTitle, setDraftTitle] = useState("New VIP discount rule");
@@ -123,6 +120,11 @@ export default function HomePage() {
     try { setPolicies(await apiRequest<Policy[]>("/api/v1/policies", actor)); }
     catch (error) { setNotice(error instanceof Error ? error.message : "无法连接到 API"); }
   }, [actor]);
+  const refreshPolicyDrafts = useCallback(async () => {
+    if (actorRole !== "admin") return;
+    try { setPolicyDrafts(await apiRequest<PolicyDraft[]>("/api/v1/policy-drafts", actor)); }
+    catch (error) { setNotice(error instanceof Error ? error.message : "无法读取待审核政策草稿"); }
+  }, [actor, actorRole]);
   useEffect(() => {
     void fetch(`${API}/api/v1/auth/me`, { credentials: "include", cache: "no-store" })
       .then(async (response) => { if (!response.ok) return; const user = await response.json(); setActor(user.actor_id); setActorRole(user.role); setDisplayName(user.display_name); setAuthenticated(true); })
@@ -131,17 +133,16 @@ export default function HomePage() {
   useEffect(() => { if (authenticated) void refreshPolicies(); }, [refreshPolicies, authenticated]);
   useEffect(() => {
     if (!authenticated) return;
-    void apiRequest<typeof customers>("/api/v1/customers", actor).then((rows) => { const requested = new URLSearchParams(window.location.search).get("customer"); setCustomers(rows); setSelectedCustomerId((current) => requested && rows.some((row) => row.id === requested) ? requested : current || rows[0]?.id || ""); setInviteCustomerId((current) => current || rows[0]?.id || ""); }).catch((e) => setNotice(e.message));
+    void apiRequest<typeof customers>("/api/v1/customers", actor).then((rows) => { const requested = new URLSearchParams(window.location.search).get("customer"); setCustomers(rows); setSelectedCustomerId((current) => requested && rows.some((row) => row.id === requested) ? requested : current || rows[0]?.id || ""); }).catch((e) => setNotice(e.message));
     void apiRequest<typeof products>("/api/v1/products", actor).then((rows) => { const requested = new URLSearchParams(window.location.search).get("product"); setProducts(rows); if (requested) { const product = rows.find((row) => row.id === requested); if (product) setInquiry((current) => current || `Please quote ${product.id} 1 unit at 0% discount.`); } }).catch((e) => setNotice(e.message));
     if (actorRole === "admin") {
-      void apiRequest<WorkspaceMember[]>("/api/v1/auth/members", actor).then(setMembers).catch((e) => setNotice(e.message));
-      void apiRequest<WorkspaceInvitation[]>("/api/v1/auth/invitations", actor).then(setInvitations).catch((e) => setNotice(e.message));
-    } else { setMembers([]); setInvitations([]); }
+      void refreshPolicyDrafts();
+    }
     if (actorRole === "manager") void apiRequest<Approval[]>("/api/v1/approvals", actor).then(setApprovals).catch((e) => setNotice(e.message));
     else setApprovals([]);
     if (actorRole === "manager" || actorRole === "admin") void apiRequest<typeof metrics>("/api/v1/metrics", actor).then(setMetrics).catch(() => setMetrics(null));
     else setMetrics(null);
-  }, [actor, actorRole, authenticated]);
+  }, [actor, actorRole, authenticated, refreshPolicyDrafts]);
 
   function acceptIdentity(user: { actor_id: string; role: string; display_name: string }) {
     setActor(user.actor_id); setActorRole(user.role); setDisplayName(user.display_name); setAuthenticated(true); setPassword(""); setNotice("已安全登录");
@@ -171,74 +172,7 @@ export default function HomePage() {
 
   async function signOut() {
     await fetch(`${API}/api/v1/auth/logout`, { method: "POST", credentials: "include" });
-    setAuthenticated(false); setActor(""); setActorRole(""); setDisplayName(""); setPolicies([]); setCustomers([]); setProducts([]); setMembers([]); setInvitations([]); setInvitationLink(""); setPasswordResetLink(""); setResult(null);
-  }
-
-  async function createCustomer(event: FormEvent) {
-    event.preventDefault(); setBusy(true); setNotice("");
-    try {
-      const customer = await apiRequest<{ id: string; name: string; tier: "VIP" | "Standard" }>("/api/v1/customers", actor, { method: "POST", body: JSON.stringify({ name: newCustomerName, tier: newCustomerTier }) });
-      setCustomers((rows) => [...rows, customer]); setSelectedCustomerId(customer.id); setNewCustomerName(""); setNotice("客户已添加到当前工作区");
-    } catch (error) { setNotice(error instanceof Error ? error.message : "添加客户失败"); }
-    finally { setBusy(false); }
-  }
-
-  async function createProduct(event: FormEvent) {
-    event.preventDefault(); setBusy(true); setNotice("");
-    try {
-      const product = await apiRequest<{ id: string; name: string; currency: string; unit_price: string; stock: number }>("/api/v1/products", actor, { method: "POST", body: JSON.stringify({ ...newProduct, unit_price: newProduct.unit_price, stock: Number(newProduct.stock) }) });
-      setProducts((rows) => [...rows, product].sort((a, b) => a.id.localeCompare(b.id))); setInquiry((current) => current || `Please quote ${product.id} 1 unit at 0% discount.`); setNewProduct({ id: "", name: "", currency: "USD", unit_price: "", stock: "" }); setNotice("商品已添加到当前工作区");
-    } catch (error) { setNotice(error instanceof Error ? error.message : "添加商品失败"); }
-    finally { setBusy(false); }
-  }
-
-  async function inviteMember(event: FormEvent) {
-    event.preventDefault(); setBusy(true); setNotice(""); setInvitationLink("");
-    try {
-      const invitation = await apiRequest<{ id: string; token: string }>("/api/v1/auth/invitations", actor, { method: "POST", body: JSON.stringify({ email: inviteEmail, role: inviteRole, customer_id: inviteRole === "sales" ? inviteCustomerId : null }) });
-      setInvitationLink(`${window.location.origin}/join?token=${encodeURIComponent(invitation.token)}`);
-      setInviteEmail(""); setInvitations(await apiRequest<WorkspaceInvitation[]>("/api/v1/auth/invitations", actor)); setNotice("邀请已创建；请通过安全渠道将链接发送给受邀邮箱对应的员工");
-    } catch (error) { setNotice(error instanceof Error ? error.message : "创建邀请失败"); }
-    finally { setBusy(false); }
-  }
-
-  async function updateMemberStatus(member: WorkspaceMember, isActive: boolean) {
-    setBusy(true); setNotice("");
-    try {
-      await apiRequest(`/api/v1/auth/members/${member.actor_id}`, actor, { method: "PATCH", body: JSON.stringify({ is_active: isActive }) });
-      setMembers((current) => current.map((item) => item.actor_id === member.actor_id ? { ...item, is_active: isActive } : item));
-      setNotice(isActive ? "成员账号已启用" : "成员已停用，其现有会话已撤销");
-    } catch (error) { setNotice(error instanceof Error ? error.message : "更新成员状态失败"); }
-    finally { setBusy(false); }
-  }
-
-  async function createPasswordResetLink(member: WorkspaceMember) {
-    setBusy(true); setNotice(""); setPasswordResetLink("");
-    try {
-      const reset = await apiRequest<{ token: string }>(`/api/v1/auth/members/${member.actor_id}/password-reset`, actor, { method: "POST" });
-      setPasswordResetLink(`${window.location.origin}/reset-password?token=${encodeURIComponent(reset.token)}`);
-      setNotice(`已为 ${member.email ?? member.display_name} 生成 1 小时有效的一次性重置链接；请通过安全渠道发送`);
-    } catch (error) { setNotice(error instanceof Error ? error.message : "生成密码重置链接失败"); }
-    finally { setBusy(false); }
-  }
-
-  async function copyPasswordResetLink() {
-    try { await navigator.clipboard.writeText(passwordResetLink); setNotice("密码重置链接已复制"); }
-    catch { setNotice("复制失败，请检查浏览器剪贴板权限"); }
-  }
-
-  async function revokeInvitation(invitation: WorkspaceInvitation) {
-    setBusy(true); setNotice("");
-    try {
-      await apiRequest(`/api/v1/auth/invitations/${invitation.id}`, actor, { method: "DELETE" });
-      setInvitations((current) => current.filter((item) => item.id !== invitation.id)); setNotice("邀请已撤销");
-    } catch (error) { setNotice(error instanceof Error ? error.message : "撤销邀请失败"); }
-    finally { setBusy(false); }
-  }
-
-  async function copyInvitationLink() {
-    try { await navigator.clipboard.writeText(invitationLink); setNotice("邀请链接已复制"); }
-    catch { setNotice("复制失败，请检查浏览器剪贴板权限"); }
+    setAuthenticated(false); setActor(""); setActorRole(""); setDisplayName(""); setPolicies([]); setCustomers([]); setProducts([]); setResult(null);
   }
 
   async function runInquiry(event?: FormEvent) {
@@ -293,9 +227,103 @@ export default function HomePage() {
     setBusy(true);
     try {
       const created = await apiRequest<PolicyDraft>("/api/v1/policy-drafts", actor, { method: "POST", body: form });
-      setPolicyDraft(created); setDraftActionType(created.action_type ?? "quote_discount"); setDraftPolicyScope(created.policy_scope ?? "general"); setDraftScopeProductId(created.scope_product_id ?? products[0]?.id ?? ""); setDraftCustomerTier(created.customer_tier ?? "VIP"); setNotice("政策文本已保存为草稿；它不会直接成为授权规则");
+      setPolicyDraft(created); setPolicyExtraction(null); setExtractionReviewed(false); setDraftTitle(created.title); setDraftActionType(created.action_type ?? "quote_discount"); setDraftPolicyScope(created.policy_scope ?? "general"); setDraftScopeProductId(created.scope_product_id ?? products[0]?.id ?? ""); setDraftCustomerTier(created.customer_tier ?? "VIP"); setDirectLimit(created.max_discount_pct ?? ""); setReviewLimit(created.review_max_discount_pct ?? ""); setExceptionEnabled(created.exception_approval_allowed); setNotice("政策原文已保存为待审核草稿。请配置结构化规则后再激活。"); void refreshPolicyDrafts();
     } catch (error) { setNotice(error instanceof Error ? error.message : "上传失败"); }
     finally { setBusy(false); }
+  }
+
+  async function extractPolicyDraft() {
+    if (!draftFile) { setNotice("请先选择 .md 或 .txt 政策文件"); return; }
+    const form = new FormData(); form.set("policy_id", draftPolicyId); form.set("version", draftVersion); form.set("file", draftFile);
+    setBusy(true); setNotice(""); setPolicyExtraction(null); setExtractionReviewed(false); setPolicyDraft(null);
+    try {
+      const result = await apiRequest<Omit<PolicyExtraction, "source"> & { fields: PolicyExtraction["fields"] }>("/api/v1/policy-drafts/extract", actor, { method: "POST", body: form });
+      const source = await draftFile.text();
+      setPolicyExtraction({ filename: result.filename, source, fields: result.fields });
+      const fields = result.fields;
+      const actionType = fields.action_type ?? "quote_discount";
+      setDraftTitle(fields.title ?? ""); setDraftActionType(actionType); setDraftPolicyScope(fields.policy_scope ?? "general");
+      setDraftScopeProductId(fields.scope_product_id ?? products[0]?.id ?? ""); setDraftCustomerTier(fields.customer_tier ?? "VIP");
+      setDirectLimit(fields.max_discount_pct ?? ""); setReviewLimit(fields.review_max_discount_pct ?? "");
+      setExceptionEnabled(fields.exception_approval_allowed === true);
+      setPolicyDraft({ id: "", policy_id: draftPolicyId, version: draftVersion, title: fields.title ?? "待补充标题", source, action_type: fields.action_type, policy_scope: fields.policy_scope ?? "general", scope_product_id: fields.scope_product_id, customer_tier: fields.customer_tier ?? "VIP", max_discount_pct: fields.max_discount_pct, review_max_discount_pct: fields.review_max_discount_pct, exception_approval_allowed: fields.exception_approval_allowed === true, status: "extracted" });
+      setNotice("已生成识别建议。请核对政策原文、补齐不确定字段并确认后，才会保存为待审核草稿。");
+    } catch (error) { setNotice(error instanceof Error ? error.message : "政策识别失败"); }
+    finally { setBusy(false); }
+  }
+
+  async function createReviewedPolicyDraft() {
+    if (!policyExtraction || !extractionReviewed) return;
+    const isDiscount = draftActionType === "quote_discount";
+    if (!draftTitle.trim() || (isDiscount && !directLimit.trim()) || (isDiscount && exceptionEnabled && !reviewLimit.trim()) || (isDiscount && draftPolicyScope === "product_specific" && !draftScopeProductId.trim())) {
+      setNotice("请先补齐标题、折扣规则和指定商品等必填信息。"); return;
+    }
+    setBusy(true); setNotice("");
+    try {
+      const created = await apiRequest<PolicyDraft>("/api/v1/policy-drafts/confirmed", actor, { method: "POST", body: JSON.stringify({
+        policy_id: draftPolicyId.trim(), version: draftVersion.trim(), source: policyExtraction.source, title: draftTitle.trim(),
+        action_type: draftActionType, policy_scope: isDiscount ? draftPolicyScope : "general",
+        scope_product_id: isDiscount && draftPolicyScope === "product_specific" ? draftScopeProductId.trim() : null,
+        customer_tier: draftCustomerTier, max_discount_pct: isDiscount ? directLimit : null,
+        review_max_discount_pct: isDiscount && exceptionEnabled ? reviewLimit : null,
+        exception_approval_allowed: isDiscount && exceptionEnabled,
+      }) });
+      setPolicyDraft(created); setPolicyExtraction(null); setExtractionReviewed(false); setDraftFile(null);
+      await refreshPolicyDrafts(); setNotice(`${created.policy_id}@${created.version} 已保存为待审核草稿；此操作不会激活政策。`);
+    } catch (error) { setNotice(error instanceof Error ? error.message : "创建政策草稿失败"); }
+    finally { setBusy(false); }
+  }
+
+  async function downloadPolicyImportTemplate(format: "csv" | "xlsx") {
+    setBusy(true); setNotice("");
+    try {
+      const response = await fetch(`${API}/api/v1/policy-drafts/import/template?format=${format}`, { credentials: "include", cache: "no-store" });
+      if (!response.ok) throw new Error("模板下载失败；请确认当前账号是工作区管理员");
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a"); link.href = url; link.download = `dealguard-policy-template.${format}`; link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) { setNotice(error instanceof Error ? error.message : "模板下载失败"); }
+    finally { setBusy(false); }
+  }
+
+  async function requestPolicyImport(path: string) {
+    if (!policyImportFile) throw new Error("请先选择 CSV 或 XLSX 文件");
+    const form = new FormData(); form.set("file", policyImportFile);
+    const response = await fetch(`${API}/api/v1/policy-drafts/import${path}`, { method: "POST", credentials: "include", body: form });
+    const payload = await response.json();
+    if (!response.ok) {
+      if (payload?.detail?.preview) setPolicyImportPreview(payload.detail.preview as PolicyImportPreview);
+      throw new Error(payload?.detail?.message ?? "政策导入失败");
+    }
+    return payload;
+  }
+
+  async function previewPolicyImport(event: FormEvent) {
+    event.preventDefault(); setBusy(true); setNotice(""); setPolicyImportPreview(null);
+    try {
+      const preview = await requestPolicyImport("/preview") as PolicyImportPreview;
+      setPolicyImportPreview(preview); setNotice(`校验完成：${preview.valid_rows} 条可导入，${preview.invalid_rows} 条需要修正。`);
+    } catch (error) { setNotice(error instanceof Error ? error.message : "政策预览失败"); }
+    finally { setBusy(false); }
+  }
+
+  async function confirmPolicyImport() {
+    setBusy(true); setNotice("");
+    try {
+      const result = await requestPolicyImport("") as { imported_count: number };
+      setPolicyImportFile(null); setPolicyImportPreview(null); await refreshPolicyDrafts();
+      setNotice(`已导入 ${result.imported_count} 条待审核政策草稿。政策尚未激活。`);
+    } catch (error) { setNotice(error instanceof Error ? error.message : "政策导入失败"); }
+    finally { setBusy(false); }
+  }
+
+  function openPolicyDraft(draft: PolicyDraft) {
+    setPolicyDraft(draft); setPolicyExtraction(null); setExtractionReviewed(false); setDraftFile(null);
+    setDraftPolicyId(draft.policy_id); setDraftVersion(draft.version); setDraftTitle(draft.title);
+    setDraftActionType(draft.action_type ?? "quote_discount"); setDraftPolicyScope(draft.policy_scope ?? "general");
+    setDraftScopeProductId(draft.scope_product_id ?? ""); setDraftCustomerTier(draft.customer_tier ?? "VIP");
+    setDirectLimit(draft.max_discount_pct ?? ""); setReviewLimit(draft.review_max_discount_pct ?? "");
+    setExceptionEnabled(draft.exception_approval_allowed);
   }
 
   async function savePolicyDraft(activate: boolean) {
@@ -315,8 +343,8 @@ export default function HomePage() {
       setPolicyDraft(saved);
       if (activate) {
         const active = await apiRequest<PolicyDraft>(`/api/v1/policy-drafts/${policyDraft.id}/activate`, actor, { method: "POST" });
-        setPolicyDraft(active); await refreshPolicies(); setNotice(`${active.policy_id}@${active.version} 已激活`);
-      } else setNotice("结构化规则已保存为待审草稿");
+        setPolicyDraft(active); await refreshPolicies(); await refreshPolicyDrafts(); setNotice(`${active.policy_id}@${active.version} 已激活`);
+      } else { await refreshPolicyDrafts(); setNotice("结构化规则已保存为待审草稿"); }
     } catch (error) { setNotice(error instanceof Error ? error.message : "保存规则失败"); }
     finally { setBusy(false); }
   }
@@ -356,28 +384,19 @@ export default function HomePage() {
   const evidenceLowRelevance = selectedTraceDetails.evidence_low_relevance === true;
   const policyConflict = selectedTraceDetails.policy_conflict === true;
 
-  if (!authenticated) return <main className="dg-app dg-login-shell"><section className="dg-login-card"><div className="dg-brand-mark" aria-hidden="true">D</div><h1>{checkingSession ? "正在检查登录状态…" : authMode === "register" ? "创建公司工作区" : "登录 DealGuard"}</h1>{!checkingSession && <><p>{authMode === "register" ? "注册后将创建独立工作区，你将成为该工作区管理员。" : "使用工作区邮箱和密码登录。"}</p><div className="dg-auth-tabs"><button type="button" onClick={() => { setAuthMode("login"); setNotice(""); }}>登录</button><button type="button" onClick={() => { setAuthMode("register"); setNotice(""); }}>创建工作区</button></div><form onSubmit={authMode === "register" ? register : signIn} className="dg-login-form">{authMode === "register" && <><label>公司名称<input value={organizationName} onChange={(e) => setOrganizationName(e.target.value)} autoComplete="organization" minLength={2} maxLength={160} required /></label><label>管理员姓名<input value={registerName} onChange={(e) => setRegisterName(e.target.value)} autoComplete="name" minLength={2} maxLength={120} required /></label></>}<label>邮箱<input type="email" value={loginId} onChange={(e) => setLoginId(e.target.value)} autoComplete="email" maxLength={254} required /></label><label>密码<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={authMode === "register" ? "new-password" : "current-password"} minLength={authMode === "register" ? 12 : 1} maxLength={1024} required />{authMode === "register" && <small>至少 12 个字符</small>}</label><button className="dg-button" disabled={busy}>{busy ? "处理中…" : authMode === "register" ? "创建工作区" : "登录"}</button>{notice && <p role="status">{notice}</p>}</form></>}</section></main>;
+  if (!authenticated) return <main className="dg-app dg-login-shell"><section className="dg-login-card"><div className="dg-brand-mark"><BrandMark /></div><h1>{checkingSession ? "正在检查登录状态…" : authMode === "register" ? "创建公司工作区" : "登录 DealGuard"}</h1>{!checkingSession && <><p>{authMode === "register" ? "注册后将创建独立工作区，你将成为该工作区管理员。" : "使用工作区邮箱和密码登录。"}</p><div className="dg-auth-tabs"><button type="button" onClick={() => { setAuthMode("login"); setNotice(""); }}>登录</button><button type="button" onClick={() => { setAuthMode("register"); setNotice(""); }}>创建工作区</button></div><form onSubmit={authMode === "register" ? register : signIn} className="dg-login-form">{authMode === "register" && <><label>公司名称<input value={organizationName} onChange={(e) => setOrganizationName(e.target.value)} autoComplete="organization" minLength={2} maxLength={160} required /></label><label>管理员姓名<input value={registerName} onChange={(e) => setRegisterName(e.target.value)} autoComplete="name" minLength={2} maxLength={120} required /></label></>}<label>邮箱<input type="email" value={loginId} onChange={(e) => setLoginId(e.target.value)} autoComplete="email" maxLength={254} required /></label><label>密码<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={authMode === "register" ? "new-password" : "current-password"} minLength={authMode === "register" ? 12 : 1} maxLength={1024} required />{authMode === "register" && <small>至少 12 个字符</small>}</label><button className="dg-button" disabled={busy}>{busy ? "处理中…" : authMode === "register" ? "创建工作区" : "登录"}</button>{notice && <p role="status">{notice}</p>}</form></>}</section></main>;
 
   return (
     <main className="dg-app">
-      <header className="dg-topbar">
-        <div className="dg-topbar-inner">
-          <div className="dg-brand">
-            <div className="dg-brand-mark" aria-hidden="true">D</div>
-            <div><div className="dg-brand-name">DealGuard</div><div className="dg-brand-subtitle">Policy-aware transaction workspace</div></div>
-            <span className="dg-demo-tag">安全会话</span>
-          </div>
-          <nav className="dg-top-nav" aria-label="主导航"><Link href="/runs">运行记录</Link><Link href="/quotes">报价中心</Link><Link href="/customers">客户</Link><Link href="/products">商品</Link>{(actorRole === "manager" || actorRole === "admin") && <Link href="/evaluation">检索评测</Link>}{actorRole === "admin" && <Link href="/audit">政策审计</Link>}</nav>
-          <div className="dg-header-actions">
-            <span className="dg-actor">{displayName}</span><button onClick={() => void signOut()} className="dg-reset">退出登录</button>
-          </div>
-        </div>
-      </header>
+      <WorkspaceNav role={actorRole} displayName={displayName} onLogout={signOut} />
 
       <div className="dg-main">
         <div className="dg-page-head">
-          <div><h1>询盘与报价工作台</h1><p>检索提供决策依据，确定性规则负责授权。所有报价均为草稿，不会提交真实交易。</p></div>
-          <div className="dg-current-policy"><span className="dg-policy-dot" /><span>当前政策</span><strong>{activePolicy ? `${activePolicy.policy_id}@${activePolicy.version}` : "载入中"}</strong></div>
+          <div className="dg-page-intro"><h1>询盘与报价工作台</h1><p>提交客户询盘，查看分析结果与政策引用。</p></div>
+          <div className="dg-page-actions">
+            <div className="dg-current-policy"><span className="dg-policy-dot" /><span>当前生效政策</span><strong>{activePolicy ? `${activePolicy.policy_id}@${activePolicy.version}` : "载入中"}</strong></div>
+            <Link className="dg-page-primary" href="#inquiry-form">新建询盘<span aria-hidden="true">↓</span></Link>
+          </div>
         </div>
         {notice && <div role="status" className="dg-notice">{notice}</div>}
 
@@ -400,9 +419,9 @@ export default function HomePage() {
 
         <div className="dg-workspace">
           <section className="dg-panel dg-panel-pad">
-            <div className="dg-panel-heading"><div><div className="dg-kicker">01 · Inquiry</div><h2>客户询盘</h2></div><span className="dg-language">English input</span></div>
+            <div className="dg-panel-heading"><div><h2>客户询盘</h2></div><span className="dg-language">支持中英文</span></div>
             <div className="dg-examples">{products.slice(0, 2).map((product) => { const example = `Please quote ${product.id} 10 units at 5% discount.`; return <button type="button" key={product.id} onClick={() => setInquiry(example)} aria-pressed={inquiry === example} className={`dg-example ${inquiry === example ? "dg-example-active" : ""}`}>{product.id} 报价示例</button>; })}</div>
-            <form onSubmit={runInquiry} aria-busy={busy}>
+            <form id="inquiry-form" onSubmit={runInquiry} aria-busy={busy}>
               <label htmlFor="customer" className="dg-field-label">客户账户</label>
               <select id="customer" className="dg-control" value={selectedCustomerId} onChange={(event) => setSelectedCustomerId(event.target.value)} required>
                 <option value="">选择客户</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name} · {customer.tier}</option>)}
@@ -416,7 +435,7 @@ export default function HomePage() {
           </section>
 
           <section className="dg-panel dg-panel-pad">
-              <div className="dg-panel-heading"><div><div className="dg-kicker">02 · Decision</div><h2>执行结果</h2></div>{result && <span className="dg-kicker">{result.execution_mode === "demo" ? "规则解析" : "模型解析"}</span>}</div>
+              <div className="dg-panel-heading"><div><h2>执行结果</h2></div>{result && <span className={`dg-mode-badge ${result.execution_mode === "demo" ? "dg-mode-demo" : "dg-mode-model"}`}>{result.execution_mode === "demo" ? "本地规则解析" : "AI 模型解析"}</span>}</div>
             {!result ? <div className="dg-empty">
               <div className="dg-empty-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M7 17 17 7M8 7h9v9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg></div>
               <p className="dg-empty-title">等待运行询盘</p><p className="dg-empty-copy">结构化请求、Guard 判定和报价草稿会显示在这里。</p>
@@ -443,18 +462,8 @@ export default function HomePage() {
           </section>
 
           <aside className="dg-side dg-column">
-            {actorRole === "admin" && <section className="dg-panel dg-panel-pad"><div className="dg-panel-heading"><div><div className="dg-kicker">Workspace setup</div><h2>工作区数据</h2></div></div>
-              <form onSubmit={createCustomer} className="dg-upload"><h3>添加客户账户</h3><label>客户名称<input value={newCustomerName} onChange={(event) => setNewCustomerName(event.target.value)} className="dg-control" minLength={2} required /></label><label>客户等级<select value={newCustomerTier} onChange={(event) => setNewCustomerTier(event.target.value as "VIP" | "Standard")} className="dg-control"><option value="Standard">Standard</option><option value="VIP">VIP</option></select></label><button className="dg-button dg-button-small dg-button-secondary" disabled={busy}>添加客户</button></form>
-              <form onSubmit={createProduct} className="dg-upload"><h3>添加商品</h3><label>商品 ID<input value={newProduct.id} onChange={(event) => setNewProduct({ ...newProduct, id: event.target.value.toUpperCase() })} className="dg-control" pattern="[A-Za-z0-9_-]+" minLength={2} required /></label><label>商品名称<input value={newProduct.name} onChange={(event) => setNewProduct({ ...newProduct, name: event.target.value })} className="dg-control" minLength={2} required /></label><div className="dg-two-fields"><label>币种<input value={newProduct.currency} onChange={(event) => setNewProduct({ ...newProduct, currency: event.target.value.toUpperCase() })} className="dg-control" pattern="[A-Z]{3}" required /></label><label>单价<input type="number" min="0.01" step="0.01" value={newProduct.unit_price} onChange={(event) => setNewProduct({ ...newProduct, unit_price: event.target.value })} className="dg-control" required /></label></div><label>库存<input type="number" min="0" step="1" value={newProduct.stock} onChange={(event) => setNewProduct({ ...newProduct, stock: event.target.value })} className="dg-control" required /></label><button className="dg-button dg-button-small dg-button-secondary" disabled={busy}>添加商品</button></form>
-              <form onSubmit={inviteMember} className="dg-upload"><h3>邀请团队成员</h3><label>员工邮箱<input type="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} className="dg-control" maxLength={254} required /></label><label>工作区角色<select value={inviteRole} onChange={(event) => setInviteRole(event.target.value as "sales" | "manager")} className="dg-control"><option value="sales">销售</option><option value="manager">经理</option></select></label>{inviteRole === "sales" && <label>负责客户<select value={inviteCustomerId} onChange={(event) => setInviteCustomerId(event.target.value)} className="dg-control" required><option value="">选择客户</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></label>}<button className="dg-button dg-button-small dg-button-secondary" disabled={busy || (inviteRole === "sales" && !customers.length)}>生成 48 小时邀请链接</button></form>
-              {invitationLink && <div className="dg-upload"><label>邀请链接<input readOnly value={invitationLink} className="dg-control"/></label><button type="button" onClick={() => void copyInvitationLink()} className="dg-button dg-button-small dg-button-secondary">复制邀请链接</button></div>}
-              {passwordResetLink && <div className="dg-upload"><label>密码重置链接<input readOnly value={passwordResetLink} className="dg-control"/></label><button type="button" onClick={() => void copyPasswordResetLink()} className="dg-button dg-button-small dg-button-secondary">复制重置链接</button></div>}
-              <div className="dg-upload"><h3>团队成员 · {members.length}</h3>{members.map((member) => <div key={member.actor_id} className="dg-policy-row"><div className="dg-policy-row-top"><strong className="dg-policy-id">{member.display_name}</strong><span className="dg-status">{member.is_active ? "启用" : "已停用"}</span></div><p className="dg-policy-limit">{member.email} · {member.role === "admin" ? "管理员" : member.role === "manager" ? "经理" : "销售"}{member.customer_id ? ` · ${customers.find((customer) => customer.id === member.customer_id)?.name ?? member.customer_id}` : ""}</p><div className="dg-quote-actions"><button type="button" onClick={() => void createPasswordResetLink(member)} disabled={busy || !member.is_active} className="dg-button dg-button-small dg-button-secondary">重置密码</button>{member.actor_id !== actor && <button type="button" onClick={() => void updateMemberStatus(member, !member.is_active)} disabled={busy} className="dg-button dg-button-small dg-button-secondary">{member.is_active ? "停用账号" : "重新启用"}</button>}</div></div>)}</div>
-              {invitations.length > 0 && <div className="dg-upload"><h3>待接受邀请 · {invitations.length}</h3>{invitations.map((invitation) => <div key={invitation.id} className="dg-policy-row"><div className="dg-policy-row-top"><strong className="dg-policy-id">{invitation.email}</strong><span className="dg-status">{invitation.expired ? "已过期" : "待接受"}</span></div><p className="dg-policy-limit">{invitation.role === "manager" ? "经理" : "销售"} · 到期 {new Date(invitation.expires_at).toLocaleString()}</p><button type="button" onClick={() => void revokeInvitation(invitation)} disabled={busy} className="dg-button dg-button-small dg-button-secondary">撤销邀请</button></div>)}</div>}
-              <p className="dg-help">当前客户：{customers.length} · 当前商品：{products.length}</p>
-            </section>}
             <section className="dg-panel dg-panel-pad" id="policy-center">
-              <div className="dg-panel-heading"><div><div className="dg-kicker">03 · Policy center</div><h2>政策版本</h2></div></div>
+              <div className="dg-panel-heading"><div><h2>政策版本</h2></div></div>
               <div className="dg-policy-list">{policies.map((policy) => <article key={policy.id} className={`dg-policy-row ${policy.status === "active" ? "dg-policy-row-active" : ""}`}>
                 <div className="dg-policy-row-top"><strong className="dg-policy-id">{policy.policy_id}@{policy.version}</strong><span className={`dg-status ${policy.status === "active" ? "dg-status-active" : ""}`}>{policy.status}</span></div>
                 <p className="dg-policy-limit">{policy.action_type === "quote_discount" ? <>{policyScopeLabels[policy.policy_scope]}{policy.scope_product_id ? ` · ${policy.scope_product_id}` : ""} · 直接上限 <strong>{policy.max_discount_pct}%</strong>{policy.review_max_discount_pct && <> · 审批上限 <strong>{policy.review_max_discount_pct}%</strong></>}</> : "仅供检索参考，不授权报价"}</p>
@@ -462,14 +471,26 @@ export default function HomePage() {
               </article>)}</div>
               {actorRole !== "admin" && <p className="dg-policy-only-admin">仅工作区管理员可以管理政策版本。</p>}
 
-              {actorRole === "admin" && <form onSubmit={uploadPolicyDraft} className="dg-upload"><h3>上传政策草稿</h3><p className="dg-help">UTF-8 Markdown / TXT，最大 1 MiB。上传内容不会直接成为授权规则。</p>
-                <div className="dg-two-fields"><input aria-label="政策编号" value={draftPolicyId} onChange={(event) => setDraftPolicyId(event.target.value)} className="dg-control"/><input aria-label="政策版本" value={draftVersion} onChange={(event) => setDraftVersion(event.target.value)} className="dg-control"/></div>
-                <input aria-label="政策文本文件" type="file" accept=".md,.txt,text/plain" onChange={(event) => setDraftFile(event.target.files?.[0] ?? null)} />
-                <button disabled={busy} className="dg-button dg-button-small dg-button-secondary">保存来源草稿</button>
-              </form>}
+              {actorRole === "admin" && <>
+                <details className="dg-policy-import"><summary>CSV / Excel 批量导入</summary><p className="dg-policy-import-copy">最多 500 条。必填列包括政策编号、版本、标题、原文、动作类型和审批标记。动作类型填写 quote_discount 或 reference_only；范围填写 general、bulk_order、loyalty、early_payment、seasonal_campaign 或 product_specific；客户等级填写 VIP 或 Standard。导入只会创建待审核草稿，不会激活政策；已有编号和版本不会覆盖。</p>
+                  <div className="dg-policy-import-buttons"><button type="button" onClick={() => void downloadPolicyImportTemplate("csv")} disabled={busy} className="dg-button dg-button-small dg-button-secondary">下载 CSV 模板</button><button type="button" onClick={() => void downloadPolicyImportTemplate("xlsx")} disabled={busy} className="dg-button dg-button-small dg-button-secondary">下载 Excel 模板</button></div>
+                  <form className="dg-policy-import-form" onSubmit={previewPolicyImport}><label>选择政策表格<input type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { setPolicyImportFile(event.target.files?.[0] ?? null); setPolicyImportPreview(null); }} /></label><button disabled={busy || !policyImportFile} className="dg-button dg-button-small dg-button-secondary">{busy ? "正在校验…" : "预览并校验"}</button></form>
+                  {policyImportPreview && <div className="dg-policy-import-preview"><strong>{policyImportPreview.filename}</strong><span>共 {policyImportPreview.total_rows} 条 · 可导入 {policyImportPreview.valid_rows} 条 · 需修正 {policyImportPreview.invalid_rows} 条</span>{policyImportPreview.rows.length > 0 && <div className="dg-policy-import-rows">{policyImportPreview.rows.slice(0, 30).map((row) => <article key={row.row_number}><strong>第 {row.row_number} 行 · {row.policy_id ?? "缺少编号"}@{row.version ?? "缺少版本"}</strong><span>{row.title ?? "缺少标题"} · {row.action_type ?? "类型待确认"}</span>{row.errors.length ? <small>{row.errors.join(" ")}</small> : <small className="dg-import-ok">可导入为待审核草稿</small>}</article>)}</div>}{policyImportPreview.rows.length > 30 && <p>列表仅显示前 30 条，提交时会重新校验全部内容。</p>}{policyImportPreview.invalid_rows > 0 && <p className="dg-import-warning">存在错误时整批不会导入，请修正后重新预览。</p>}<button type="button" onClick={() => void confirmPolicyImport()} disabled={busy || !policyImportPreview.valid_rows || !!policyImportPreview.invalid_rows || !policyImportFile} className="dg-button">创建 {policyImportPreview.valid_rows} 条待审核草稿</button></div>}
+                </details>
+
+                {policyDrafts.length > 0 && <div className="dg-policy-draft-queue"><h3>待审核草稿 · {policyDrafts.length}</h3>{policyDrafts.map((draft) => <article key={draft.id}><div><strong>{draft.policy_id}@{draft.version}</strong><span>{draft.title} · {draft.action_type === "reference_only" ? "仅供参考" : draft.max_discount_pct == null ? "规则待补齐" : `${draft.max_discount_pct}% 折扣上限`}</span></div><button type="button" className="dg-button dg-button-small dg-button-secondary" onClick={() => openPolicyDraft(draft)}>审核草稿</button></article>)}</div>}
+
+                <form onSubmit={uploadPolicyDraft} className="dg-upload"><h3>新建政策草稿</h3><p className="dg-help">上传 UTF-8 Markdown / TXT 原文；AI 识别使用当前配置的模型服务，生成建议后仍需管理员核对。</p>
+                  <div className="dg-two-fields"><input aria-label="政策编号" value={draftPolicyId} onChange={(event) => setDraftPolicyId(event.target.value)} className="dg-control" placeholder="政策编号"/><input aria-label="政策版本" value={draftVersion} onChange={(event) => setDraftVersion(event.target.value)} className="dg-control" placeholder="版本号"/></div>
+                  <input aria-label="政策文本文件" type="file" accept=".md,.txt,text/plain" onChange={(event) => { setDraftFile(event.target.files?.[0] ?? null); setPolicyExtraction(null); setPolicyDraft(null); setExtractionReviewed(false); }} />
+                  <div className="dg-policy-import-buttons"><button type="button" onClick={() => void extractPolicyDraft()} disabled={busy || !draftFile} className="dg-button">AI 识别规则</button><button disabled={busy || !draftFile} className="dg-button dg-button-small dg-button-secondary">仅保存原文草稿</button></div>
+                </form>
+                {policyExtraction && <div className="dg-policy-extraction"><h3>模型识别建议 · 请核对</h3><p>模型仅提供字段建议，不作政策解释授权。请对照原文逐项检查并修正下方字段。</p><details open><summary>政策原文与引用依据</summary><pre>{policyExtraction.source}</pre>{policyExtraction.fields.supporting_evidence.length > 0 ? <ul>{policyExtraction.fields.supporting_evidence.map((evidence, index) => <li key={`${index}-${evidence}`}>“{evidence}”</li>)}</ul> : <span>模型未能提供可核对的原文引用。</span>}</details>{policyExtraction.fields.uncertain_fields.length > 0 && <div className="dg-import-warning">需人工补充或确认：{policyExtraction.fields.uncertain_fields.join("、")}</div>}<label className="dg-policy-review-check"><input type="checkbox" checked={extractionReviewed} onChange={(event) => setExtractionReviewed(event.target.checked)}/>我已对照政策原文核对识别结果</label></div>}
+              </>}
               {actorRole === "admin" && policyDraft && <div className="dg-upload"><h3>{policyDraft.policy_id}@{policyDraft.version} · {policyDraft.status}</h3>
                 <div className="dg-rule-fields"><label>政策标题<input aria-label="政策标题" value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} className="dg-control"/></label><label>授权范围<select aria-label="政策动作范围" value={draftActionType} onChange={(event) => setDraftActionType(event.target.value as "quote_discount" | "reference_only")} className="dg-control"><option value="quote_discount">折扣报价规则</option><option value="reference_only">仅供检索参考</option></select></label>{draftActionType === "quote_discount" && <><label>适用客户等级<select aria-label="政策客户等级" value={draftCustomerTier} onChange={(event) => setDraftCustomerTier(event.target.value as "VIP" | "Standard")} className="dg-control"><option value="VIP">VIP</option><option value="Standard">Standard</option></select></label><label>适用政策类型<select aria-label="政策适用类型" value={draftPolicyScope} onChange={(event) => setDraftPolicyScope(event.target.value as PolicyScope)} className="dg-control">{Object.entries(policyScopeLabels).map(([scope, label]) => <option key={scope} value={scope}>{label}</option>)}</select></label>{draftPolicyScope === "product_specific" && <label>适用商品 ID<input aria-label="适用商品 ID" value={draftScopeProductId} onChange={(event) => setDraftScopeProductId(event.target.value.trim().toUpperCase())} className="dg-control"/></label>}<label>直接折扣上限 %<input type="number" min="0" max="100" value={directLimit} onChange={(event) => setDirectLimit(event.target.value)} className="dg-control"/></label><label className="dg-checkbox"><input type="checkbox" checked={exceptionEnabled} onChange={(event) => setExceptionEnabled(event.target.checked)}/>允许例外审批</label>{exceptionEnabled && <label>审批折扣上限 %<input type="number" min="0" max="100" value={reviewLimit} onChange={(event) => setReviewLimit(event.target.value)} className="dg-control"/></label>}</>}</div>
-                <div className="dg-draft-actions"><button onClick={() => void savePolicyDraft(false)} disabled={busy || policyDraft.status === "active"} className="dg-button dg-button-small dg-button-secondary">保存规则</button><button onClick={() => void savePolicyDraft(true)} disabled={busy || policyDraft.status === "active"} className="dg-button dg-button-small">保存并激活</button></div>
+                {policyExtraction && <div className="dg-policy-draft-source">来源文件：{policyExtraction.filename} · 引用原文和字段需管理员确认。</div>}
+                <div className="dg-draft-actions">{policyDraft.status === "extracted" ? <button type="button" onClick={() => void createReviewedPolicyDraft()} disabled={busy || !extractionReviewed} className="dg-button">{busy ? "正在保存…" : "确认并保存为待审核草稿"}</button> : <><button type="button" onClick={() => void savePolicyDraft(false)} disabled={busy || policyDraft.status === "active"} className="dg-button dg-button-small dg-button-secondary">保存规则</button><button type="button" onClick={() => void savePolicyDraft(true)} disabled={busy || policyDraft.status === "active"} className="dg-button dg-button-small">保存并激活</button></>}</div>
               </div>}
 
               <div className="dg-divider"><h3 className="dg-block-title">策略版本 Diff</h3><p className="dg-diff-copy">使用当前选定客户和询盘，逐项比较 Guard 结果，不创建报价。</p>
@@ -481,7 +502,7 @@ export default function HomePage() {
 
           </aside>
         </div>
-        <section className="dg-panel dg-panel-pad dg-trace-panel"><div className="dg-panel-heading"><div><div className="dg-kicker">04 · Trace</div><h2>运行轨迹</h2></div>{result?.duration_ms != null && <span className="dg-trace-total">{result.duration_ms} ms 总耗时</span>}</div>
+        <section className="dg-panel dg-panel-pad dg-trace-panel"><div className="dg-panel-heading"><div><h2>运行轨迹</h2></div>{result?.duration_ms != null && <span className="dg-trace-total">{result.duration_ms} ms 总耗时</span>}</div>
           {!result?.trace.length ? <p className="dg-help">运行后的程序事件会显示在这里。</p> : <><ol className="dg-trace dg-trace-interactive" aria-label="工作流阶段">{result.trace.map((event, index) => <li key={`${event.step}-${index}`} className={`dg-trace-item ${selectedTrace === index ? "dg-trace-selected" : ""}`}><button type="button" className="dg-trace-button" aria-expanded={selectedTrace === index} onClick={() => setSelectedTrace(selectedTrace === index ? null : index)}><span className="dg-trace-dot">{index + 1}</span><span className="dg-trace-content"><span className="dg-trace-top"><strong className="dg-trace-step">{traceLabels[event.step] ?? event.step.replaceAll("_", " ")}</strong><span className="dg-trace-status">{event.status}</span></span>{typeof event.details?.duration_ms === "number" && <span className="dg-trace-duration">{event.details.duration_ms} ms</span>}</span></button></li>)}</ol><p className="dg-trace-hint">点选步骤查看事件详情 · 横向滑动查看完整轨迹</p>{selectedTraceEvent && <div className="dg-trace-detail"><div><strong>{traceLabels[selectedTraceEvent.step] ?? selectedTraceEvent.step.replaceAll("_", " ")}</strong><span>{selectedTraceEvent.timestamp ? new Date(selectedTraceEvent.timestamp).toLocaleTimeString() : ""}</span></div><p>{selectedTraceEvent.message}</p>{selectedTraceEvent.step === "retrieve_policy" && <div className="dg-trace-readout"><div><span>检索路径</span><strong>{retrievalModeLabels[retrievalMode] ?? (retrievalMode || "未选择")}</strong></div>{candidateCount !== null && <div><span>有效政策候选</span><strong>{candidateCount}</strong></div>}{queryExpansionTerms.length > 0 && <div><span>命中领域词</span><span className="dg-trace-chips">{queryExpansionTerms.map((term) => <code key={term}>{term}</code>)}</span></div>}{citationRefs.length > 0 && <div><span>原文引用</span><span className="dg-trace-chips">{citationRefs.map((ref) => <code key={ref}>{ref}</code>)}</span></div>}{evidenceLowRelevance && <p className="dg-trace-warning" role="status">没有找到与询盘匹配的政策文本，系统已阻止报价。</p>}{policyConflict && <p className="dg-trace-warning" role="status">有效政策规则存在冲突，系统已阻止报价。</p>}{retrievalMode === "registry_abstain" && !evidenceLowRelevance && !policyConflict && <p className="dg-trace-warning" role="status">多条有效政策同时符合，系统没有自动选择。</p>}</div>}{Object.keys(selectedTraceEvent.details ?? {}).length > 0 && <details className="dg-trace-raw"><summary>查看完整 Trace 字段</summary><pre>{JSON.stringify(selectedTraceEvent.details, null, 2)}</pre></details>}</div>}</>}
         </section>
         <footer className="dg-footer"><p>当前工作区业务数据 · USD</p><p>{result ? `Run ${result.run_id} · ${result.execution_mode === "demo" ? "Rules engine" : "Configured model"}` : "Retrieval informs decisions; deterministic policies authorize actions."}</p></footer>

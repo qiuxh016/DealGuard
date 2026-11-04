@@ -1,8 +1,8 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import "../history.css";
+import { WorkspaceNav } from "../../components/WorkspaceNav";
 
 type RunSummary = {
   run_id: string; actor_id: string; status: string; execution_mode: string; decision: string | null;
@@ -70,8 +70,8 @@ export default function RunsPage() {
     } catch (error) { setNotice(error instanceof Error ? error.message : "无法读取运行详情"); }
   }
 
-  return <main className="dg-history"><div className="dg-history-main">
-    <header className="dg-history-head"><div><h1>运行记录</h1><p>查看受当前身份权限约束的决策、政策版本和 Trace。</p></div><nav className="dg-history-nav"><Link href="/">工作台</Link>{(role === "manager" || role === "admin") && <Link href="/evaluation">检索评测</Link>}{role === "admin" && <Link href="/audit">政策审计</Link>}</nav></header>
+  return <><WorkspaceNav role={role} /><main className="dg-history"><div className="dg-history-main">
+    <header className="dg-history-head"><div><h1>运行记录</h1><p>查看受当前身份权限约束的决策、政策版本和 Trace。</p></div></header>
     <section className="dg-history-panel" style={{ marginTop: 12 }}>
       <form className="dg-history-filters" onSubmit={(event) => void loadRuns(event)}>
         <label>决策<select value={decision} onChange={(event) => setDecision(event.target.value)}><option value="">全部</option>{["ALLOW", "REVIEW", "DENY", "NEEDS_INPUT"].map((value) => <option key={value}>{value}</option>)}</select></label>
@@ -87,5 +87,5 @@ export default function RunsPage() {
       </table>{rows.length === 0 && <div className="dg-history-empty">没有匹配的运行记录</div>}</div>
       {detail && <div className="dg-history-detail"><h2>运行详情 · {detail.run_id}</h2><pre>{JSON.stringify({ status: detail.status, mode: detail.execution_mode, intent: detail.intent, decision: detail.decision, quote: detail.quote, policy_evidence: detail.policy_evidence, trace: detail.trace }, null, 2)}</pre></div>}
     </section>
-  </div></main>;
+  </div></main></>;
 }

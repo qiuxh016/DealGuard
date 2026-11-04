@@ -1,10 +1,4 @@
 .dg-operations { min-height: 100vh; background: #f4f6f8; color: #14243d; }
-.dg-workspace-nav { min-height: 58px; display: flex; align-items: center; gap: 30px; padding: 0 max(24px, calc((100vw - 1420px) / 2)); border-bottom: 1px solid #dfe6ec; background: #fff; }
-.dg-workspace-brand { color: #14243d; font-size: 17px; font-weight: 800; letter-spacing: -.035em; text-decoration: none; }
-.dg-workspace-links { min-width: 0; display: flex; align-items: stretch; gap: 3px; align-self: stretch; overflow-x: auto; }
-.dg-workspace-links a { display: inline-flex; align-items: center; padding: 0 12px; color: #65738a; border-bottom: 2px solid transparent; white-space: nowrap; text-decoration: none; font-size: 12px; font-weight: 650; }
-.dg-workspace-links a:hover, .dg-workspace-links a[aria-current="page"] { color: #245bd8; }
-.dg-workspace-links a[aria-current="page"] { border-bottom-color: #2864e8; }
 .dg-operations-main { width: min(1420px, calc(100% - 48px)); margin: 34px auto 64px; }
 .dg-operations-head { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 22px; }
 .dg-operations-head h1 { margin: 0; font-size: clamp(25px, 2.4vw, 32px); letter-spacing: -.04em; }
@@ -81,7 +75,26 @@
 .dg-operations-form input, .dg-operations-form select { min-height: 39px; min-width: 0; border: 1px solid #dbe3ec; border-radius: 7px; padding: 8px 10px; color: #25354d; background: #fff; font: inherit; font-size: 12px; outline: none; }
 .dg-operations-form .dg-form-wide { grid-column: 1 / -1; }
 .dg-form-actions { display: flex; justify-content: end; gap: 8px; grid-column: 1 / -1; margin-top: 4px; }
+.dg-product-import { margin-bottom: 16px; padding: 19px; }
+.dg-product-import-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; }
+.dg-product-import-head h2 { margin: 0; color: #243650; font-size: 16px; }
+.dg-product-import-head p, .dg-product-import-more { margin: 7px 0 0; color: #78869b; font-size: 11px; line-height: 1.55; }
+.dg-product-import-templates { display: flex; flex-wrap: wrap; gap: 7px; }
+.dg-product-import-form { display: flex; align-items: end; gap: 12px; margin-top: 16px; padding: 14px; border: 1px dashed #d6e0ed; border-radius: 9px; background: #f9fbfe; }
+.dg-product-import-form label { display: grid; flex: 1; gap: 7px; color: #586980; font-size: 11px; font-weight: 650; }
+.dg-product-import-form input { min-height: 38px; color: #53627a; font: inherit; font-size: 12px; }
+.dg-product-import-preview { margin-top: 14px; }
+.dg-product-import-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-bottom: 10px; color: #718097; font-size: 11px; }
+.dg-product-import-summary strong { color: #30415a; }
+.dg-import-valid { color: #27816c; font-weight: 700; }
+.dg-import-invalid, .dg-product-import-warning { color: #b34d48; font-weight: 650; }
+.dg-product-import-warning { margin: 11px 0; font-size: 11px; }
+.dg-product-import-table { width: 100%; min-width: 740px; border-collapse: collapse; text-align: left; font-size: 11px; }
+.dg-product-import-table th { padding: 9px 10px; background: #f4f7fb; color: #718097; font-size: 10px; white-space: nowrap; }
+.dg-product-import-table td { max-width: 280px; border-top: 1px solid #edf0f4; padding: 9px 10px; color: #526078; overflow-wrap: anywhere; }
+.dg-product-import-more { padding: 0 10px; }
+.dg-product-import-preview .dg-form-actions { margin-top: 12px; }
 .dg-operations-notice { margin-bottom: 13px; border: 1px solid #f0d7b3; border-radius: 8px; background: #fffaf1; padding: 11px 13px; color: #8a5a22; font-size: 12px; }
 .dg-operations-skeleton { min-height: 220px; display: grid; place-items: center; color: #8995a7; font-size: 12px; }
 @media (max-width: 980px) { .dg-quote-layout { grid-template-columns: minmax(0, 1fr); } .dg-quote-detail { position: static; } }
-@media (max-width: 680px) { .dg-workspace-nav { align-items: flex-start; flex-direction: column; gap: 0; padding: 13px 15px 0; } .dg-workspace-links { width: 100%; min-height: 39px; } .dg-workspace-links a { padding: 0 9px; font-size: 11px; } .dg-operations-main { width: calc(100% - 24px); margin-top: 22px; } .dg-operations-head { align-items: flex-start; flex-direction: column; gap: 14px; } .dg-operations-actions { width: 100%; } .dg-operations-actions > * { flex: 1; } .dg-quote-detail { padding: 15px; } .dg-operations-form { grid-template-columns: 1fr; } .dg-operations-form .dg-form-wide, .dg-form-actions { grid-column: auto; } .dg-catalog-table { min-width: 620px; } }
+@media (max-width: 680px) { .dg-workspace-nav { align-items: flex-start; flex-direction: column; gap: 0; padding: 13px 15px 0; } .dg-workspace-links { width: 100%; min-height: 39px; } .dg-workspace-links a { padding: 0 9px; font-size: 11px; } .dg-operations-main { width: calc(100% - 24px); margin-top: 22px; } .dg-operations-head { align-items: flex-start; flex-direction: column; gap: 14px; } .dg-operations-actions { width: 100%; } .dg-operations-actions > * { flex: 1; } .dg-quote-detail { padding: 15px; } .dg-operations-form { grid-template-columns: 1fr; } .dg-operations-form .dg-form-wide, .dg-form-actions { grid-column: auto; } .dg-catalog-table { min-width: 620px; } .dg-product-import { padding: 14px; } .dg-product-import-head, .dg-product-import-form { align-items: stretch; flex-direction: column; } .dg-product-import-templates > button { flex: 1; } }

@@ -21,9 +21,22 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="DealGuard API", version="0.1.0", lifespan=lifespan)
 
+
+def frontend_allowed_origins() -> list[str]:
+    origins = {settings.frontend_origin}
+    if settings.app_env != "production":
+        origins.update({
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3001",
+        })
+    return sorted(origins)
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_origin],
+    allow_origins=frontend_allowed_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*", "X-Demo-Actor"],

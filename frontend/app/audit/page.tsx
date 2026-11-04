@@ -1,8 +1,8 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import "../history.css";
+import { WorkspaceNav } from "../../components/WorkspaceNav";
 
 type AuditEvent = { id: string; actor_id: string; action: string; outcome: string; reason_code: string | null; policy_id: string | null; version: string | null; created_at: string };
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
@@ -51,8 +51,8 @@ export default function AuditPage() {
     }).catch((error) => setNotice(error instanceof Error ? error.message : "无法读取审计记录"));
   }, [actor, headers]);
 
-  return <main className="dg-history"><div className="dg-history-main">
-    <header className="dg-history-head"><div><h1>政策管理审计</h1><p>记录政策草稿上传、规则编辑、激活及拒绝事件，不展示政策正文。</p></div><nav className="dg-history-nav"><Link href="/">工作台</Link><Link href="/runs">运行记录</Link><Link href="/evaluation">检索评测</Link></nav></header>
+  return <><WorkspaceNav /><main className="dg-history"><div className="dg-history-main">
+    <header className="dg-history-head"><div><h1>政策管理审计</h1><p>记录政策草稿上传、规则编辑、激活及拒绝事件，不展示政策正文。</p></div></header>
     <section className="dg-history-panel" style={{ marginTop: 12 }}>
       <form className="dg-history-filters" onSubmit={(event) => void loadAudit(event)}>
         <label>动作<input placeholder="全部动作" value={action} onChange={(event) => setAction(event.target.value)} /></label>
@@ -67,5 +67,5 @@ export default function AuditPage() {
         {rows.map((row) => <tr key={row.id}><td>{new Date(row.created_at).toLocaleString()}</td><td>{row.actor_id}</td><td>{row.action}</td><td>{row.outcome}</td><td>{row.reason_code ?? "—"}</td><td>{row.policy_id ? `${row.policy_id}@${row.version ?? "—"}` : "—"}</td></tr>)}
       </tbody></table>{rows.length === 0 && <div className="dg-history-empty">没有匹配的政策审计记录。此页面仅管理员可读。</div>}</div>
     </section>
-  </div></main>;
+  </div></main></>;
 }

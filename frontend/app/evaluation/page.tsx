@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import "../history.css";
+import { WorkspaceNav } from "../../components/WorkspaceNav";
 
 type Metric = { cases: number; citation_accuracy_at_1: number; recall_at_3: number; mrr: number; failed_case_ids: string[] };
 type Dataset = "retrieval_v1" | "retrieval_v2";
@@ -41,8 +41,8 @@ export default function EvaluationPage() {
     const link = document.createElement("a"); link.href = url; link.download = `dealguard-evaluation-${report.dataset}-${report.split}.json`; link.click(); URL.revokeObjectURL(url);
   }
 
-  return <main className="dg-history"><div className="dg-history-main">
-    <header className="dg-history-head"><div><h1>检索评测</h1><p>查看固定语料上的政策引用指标，并导出可复核 JSON 报告。</p></div><nav className="dg-history-nav"><Link href="/">工作台</Link><Link href="/runs">运行记录</Link><Link href="/audit">政策审计</Link></nav></header>
+  return <><WorkspaceNav /><main className="dg-history"><div className="dg-history-main">
+    <header className="dg-history-head"><div><h1>检索评测</h1><p>查看固定语料上的政策引用指标，并导出可复核 JSON 报告。</p></div></header>
     <section className="dg-history-panel" style={{ marginTop: 12 }}>
       <div className="dg-history-filters"><label>评测语料<select value={dataset} onChange={(event) => { const next = event.target.value as Dataset; setDataset(next); setSplit("all"); setReport(null); void loadReport(next, "all"); }}><option value="retrieval_v1">v1：50 条政策检索（英）</option><option value="retrieval_v2">v2：20 条政策检索（英中）</option></select></label><label>数据切分<select value={split} onChange={(event) => { setSplit(event.target.value); void loadReport(dataset, event.target.value); }}><option value="all">全部（{dataset === "retrieval_v1" ? 50 : 20}）</option><option value="development">开发集（{dataset === "retrieval_v1" ? 35 : 10}）</option><option value="holdout">留出集（{dataset === "retrieval_v1" ? 15 : 10}）</option></select></label><button className="dg-history-button" onClick={downloadReport} disabled={!report}>导出 JSON</button></div>
       {notice && <p className="dg-history-notice" role="status">{notice}</p>}
@@ -54,5 +54,5 @@ export default function EvaluationPage() {
         </tbody></table></div>
       </>}
     </section>
-  </div></main>;
+  </div></main></>;
 }

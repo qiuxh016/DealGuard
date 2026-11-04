@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { BrandMark } from "../../components/BrandMark";
 import "../workspace.css";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
@@ -38,7 +39,7 @@ export default function JoinWorkspacePage() {
   }
 
   return <main className="dg-app dg-login-shell"><section className="dg-login-card">
-    <div className="dg-brand-mark" aria-hidden="true">D</div>
+    <div className="dg-brand-mark"><BrandMark /></div>
     <h1>加入 DealGuard 工作区</h1>
     <p>设置姓名和密码后，即可使用管理员分配的工作区权限。</p>
     {!token ? <div className="dg-login-form"><p role="status">邀请链接无效或已过期，请联系工作区管理员重新发送。</p><Link href="/">返回登录</Link></div> : <form onSubmit={acceptInvitation} className="dg-login-form">

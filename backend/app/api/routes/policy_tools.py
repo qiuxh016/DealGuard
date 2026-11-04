@@ -1,20 +1,24 @@
+import asyncio
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.agents.workflow import _parse_intent
 from app.db.database import get_db
 from app.db.models import Customer, DemoActor, Policy, PolicyDraft, Product
 from app.guards.business_rules import evaluate_quote
-from app.schemas.deal import ActionProposal, GuardDecision, InquiryIntent, MetricsResponse, PolicyDiffLine, PolicyDiffRequest, PolicyDiffResponse, PolicyDiffSide, PolicyDraftResponse, PolicyDraftUpdate
-from app.db.models import RunRecord
+from app.schemas.deal import ActionProposal, GuardDecision, InquiryIntent, MetricsResponse, PolicyDiffLine, PolicyDiffRequest, PolicyDiffResponse, PolicyDiffSide, PolicyDraftCreate, PolicyDraftResponse, PolicyDraftSummary, PolicyDraftUpdate
+from app.db.models import PolicyAuditEvent, RunRecord
 from app.services.actors import get_current_actor
 from app.services.permissions import has_capability, require_capability
 from app.services.inventory import aggregate_inventory_failure
 from app.services.policy_audit import add_policy_audit_event
+from app.services.policy_extraction import extract_policy_rules
+from app.services.policy_import import MAX_POLICY_IMPORT_BYTES, PolicyImportError, parse_policy_import, policy_import_template, public_policy_import_preview
 from app.services.policies import activate_policy
 
 router = APIRouter(tags=["policy governance", "metrics"])
@@ -58,6 +62,16 @@ def _draft_response(row: PolicyDraft) -> PolicyDraftResponse:
         status=row.status, source=row.source)
 
 
+def _draft_summary(row: PolicyDraft) -> PolicyDraftSummary:
+    return PolicyDraftSummary(
+        id=row.id, policy_id=row.policy_id, version=row.version, title=row.title,
+        action_type=row.action_type, policy_scope=row.policy_scope, scope_product_id=row.scope_product_id,
+        customer_tier=row.customer_tier, max_discount_pct=row.max_discount_pct,
+        review_max_discount_pct=row.review_max_discount_pct,
+        exception_approval_allowed=row.exception_approval_allowed, status=row.status,
+    )
+
+
 def _deny_policy_action(db: Session, actor: DemoActor, action: str, code: str, message: str,
                        status_code: int = 409, policy_id: str | None = None, version: str | None = None):
     add_policy_audit_event(db, actor, action, "DENIED", code, policy_id, version)
@@ -89,6 +103,149 @@ async def upload_policy_draft(policy_id: str = Form(min_length=1, max_length=80)
     db.commit()
     db.refresh(row)
     return _draft_response(row)
+
+
+@router.get("/policy-drafts", response_model=list[PolicyDraftSummary])
+def list_policy_drafts(actor: DemoActor = Depends(get_current_actor), db: Session = Depends(get_db)):
+    if not has_capability(actor, "policy_drafts.manage"):
+        raise HTTPException(status_code=403, detail={"code": "ADMIN_REQUIRED", "message": "Only workspace administrators can view policy drafts."})
+    rows = db.scalars(select(PolicyDraft).where(
+        PolicyDraft.tenant_id == actor.tenant_id, PolicyDraft.status == "draft",
+    ).order_by(PolicyDraft.created_at.desc()).limit(100)).all()
+    return [_draft_summary(row) for row in rows]
+
+
+@router.post("/policy-drafts/extract")
+async def extract_policy_draft_rules(
+    policy_id: str = Form(min_length=2, max_length=80),
+    version: str = Form(min_length=1, max_length=40),
+    file: UploadFile = File(...),
+    actor: DemoActor = Depends(get_current_actor),
+    db: Session = Depends(get_db),
+):
+    _admin(actor, db, "policy_rules_extraction_requested", policy_id, version)
+    if Path(file.filename or "").suffix.lower() not in {".md", ".txt"}:
+        raise HTTPException(status_code=415, detail={"code": "UNSUPPORTED_POLICY_FILE", "message": "请上传 UTF-8 编码的 .md 或 .txt 文件。"})
+    content = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail={"code": "POLICY_FILE_TOO_LARGE", "message": "政策文件不能超过 1 MiB。"})
+    try:
+        source = content.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise HTTPException(status_code=422, detail={"code": "INVALID_POLICY_ENCODING", "message": "政策文件必须使用 UTF-8 编码。"}) from error
+    if not source.strip():
+        raise HTTPException(status_code=422, detail={"code": "EMPTY_POLICY_FILE", "message": "政策原文不能为空。"})
+    try:
+        extracted = await asyncio.to_thread(extract_policy_rules, source)
+    except RuntimeError as error:
+        code = str(error)
+        message = "请先配置 OpenAI-compatible 模型 API 后再使用规则识别。" if code == "POLICY_EXTRACTION_MODEL_NOT_CONFIGURED" else "政策文本超过模型识别长度上限（50,000 字符）。"
+        add_policy_audit_event(db, actor, "policy_rules_extraction_failed", "FAILED", code, policy_id, version)
+        db.commit()
+        raise HTTPException(status_code=503 if code == "POLICY_EXTRACTION_MODEL_NOT_CONFIGURED" else 413,
+                            detail={"code": code, "message": message}) from error
+    except Exception as error:
+        add_policy_audit_event(db, actor, "policy_rules_extraction_failed", "FAILED", "POLICY_EXTRACTION_FAILED", policy_id, version)
+        db.commit()
+        raise HTTPException(status_code=503, detail={"code": "POLICY_EXTRACTION_FAILED", "message": "模型未能可靠识别政策结构，请手动填写规则或检查模型配置。"}) from error
+
+    add_policy_audit_event(db, actor, "policy_rules_extracted", "SUCCESS", policy_id=policy_id, version=version)
+    db.commit()
+    return {"filename": file.filename, "extraction_mode": "llm", "fields": extracted.model_dump(mode="json"), "source_characters": len(source)}
+
+
+@router.post("/policy-drafts/confirmed", response_model=PolicyDraftResponse, status_code=201)
+def create_confirmed_policy_draft(body: PolicyDraftCreate, actor: DemoActor = Depends(get_current_actor), db: Session = Depends(get_db)):
+    _admin(actor, db, "policy_draft_confirmed", body.policy_id, body.version)
+    if body.policy_scope == "product_specific" and db.scalar(select(Product.id).where(
+        Product.id == body.scope_product_id, Product.tenant_id == actor.tenant_id,
+    )) is None:
+        raise HTTPException(status_code=422, detail={"code": "POLICY_SCOPE_PRODUCT_NOT_FOUND", "message": "指定商品不在当前工作区。"})
+    row = PolicyDraft(
+        policy_id=body.policy_id, version=body.version, title=body.title, source=body.source,
+        action_type=body.action_type, policy_scope=body.policy_scope, scope_product_id=body.scope_product_id,
+        customer_tier=body.customer_tier, max_discount_pct=body.max_discount_pct,
+        review_max_discount_pct=body.review_max_discount_pct,
+        exception_approval_allowed=body.exception_approval_allowed, uploaded_by=actor.id, tenant_id=actor.tenant_id,
+    )
+    db.add(row)
+    add_policy_audit_event(db, actor, "policy_draft_created_from_review", "SUCCESS", policy_id=body.policy_id, version=body.version)
+    db.commit()
+    db.refresh(row)
+    return _draft_response(row)
+
+
+def _policy_import_context(file: UploadFile, content: bytes, actor: DemoActor, db: Session):
+    try:
+        rows = parse_policy_import(content, file.filename or "")
+    except PolicyImportError as error:
+        raise HTTPException(status_code=error.status_code, detail={"code": "POLICY_IMPORT_FILE_INVALID", "message": str(error)}) from error
+    existing = {(policy_id.upper(), version.upper()) for policy_id, version in db.execute(
+        select(Policy.policy_id, Policy.version).where(Policy.tenant_id == actor.tenant_id)
+    ).all()}
+    existing.update((policy_id.upper(), version.upper()) for policy_id, version in db.execute(
+        select(PolicyDraft.policy_id, PolicyDraft.version).where(PolicyDraft.tenant_id == actor.tenant_id)
+    ).all())
+    preview = public_policy_import_preview(rows, existing)
+    product_ids = {row["draft"]["scope_product_id"] for row in rows if row["draft"] and row["draft"]["policy_scope"] == "product_specific"}
+    available_products = set(db.scalars(select(Product.id).where(
+        Product.tenant_id == actor.tenant_id, Product.id.in_(product_ids or {""}),
+    )).all())
+    for row, public_row in zip(rows, preview["rows"], strict=True):
+        if row["draft"] and row["draft"]["policy_scope"] == "product_specific" and row["draft"]["scope_product_id"] not in available_products:
+            public_row["errors"].append("指定商品不在当前工作区。")
+    preview["valid_rows"] = sum(not row["errors"] for row in preview["rows"])
+    preview["invalid_rows"] = preview["total_rows"] - preview["valid_rows"]
+    return rows, preview
+
+
+@router.get("/policy-drafts/import/template")
+def download_policy_import_template(
+    format: str = Query(default="csv", pattern="^(csv|xlsx)$"),
+    actor: DemoActor = Depends(get_current_actor),
+    db: Session = Depends(get_db),
+):
+    _admin(actor, db, "policy_import_template_downloaded")
+    content, media_type, filename = policy_import_template(format)
+    return Response(content=content, media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+@router.post("/policy-drafts/import/preview")
+async def preview_policy_import(file: UploadFile = File(...), actor: DemoActor = Depends(get_current_actor), db: Session = Depends(get_db)):
+    _admin(actor, db, "policy_import_previewed")
+    content = await file.read(MAX_POLICY_IMPORT_BYTES + 1)
+    if len(content) > MAX_POLICY_IMPORT_BYTES:
+        raise HTTPException(status_code=413, detail={"code": "POLICY_IMPORT_TOO_LARGE", "message": "文件不能超过 5 MiB。"})
+    _, preview = _policy_import_context(file, content, actor, db)
+    return {"filename": file.filename, **preview}
+
+
+@router.post("/policy-drafts/import")
+async def import_policy_drafts(file: UploadFile = File(...), actor: DemoActor = Depends(get_current_actor), db: Session = Depends(get_db)):
+    _admin(actor, db, "policy_drafts_imported")
+    content = await file.read(MAX_POLICY_IMPORT_BYTES + 1)
+    if len(content) > MAX_POLICY_IMPORT_BYTES:
+        raise HTTPException(status_code=413, detail={"code": "POLICY_IMPORT_TOO_LARGE", "message": "文件不能超过 5 MiB。"})
+    rows, preview = _policy_import_context(file, content, actor, db)
+    if preview["total_rows"] == 0:
+        raise HTTPException(status_code=422, detail={"code": "POLICY_IMPORT_EMPTY", "message": "文件中没有政策数据行。"})
+    if preview["invalid_rows"]:
+        raise HTTPException(status_code=422, detail={
+            "code": "POLICY_IMPORT_VALIDATION_FAILED", "message": "发现无效或重复行；整批没有导入。请修正文件后重新预览。",
+            "preview": {"filename": file.filename, **preview},
+        })
+    drafts = [PolicyDraft(**row["draft"], uploaded_by=actor.id, tenant_id=actor.tenant_id) for row in rows]
+    db.add_all(drafts)
+    for row in rows:
+        add_policy_audit_event(db, actor, "policy_draft_imported", "SUCCESS", policy_id=row["draft"]["policy_id"], version=row["draft"]["version"])
+    try:
+        db.commit()
+    except IntegrityError as error:
+        db.rollback()
+        raise HTTPException(status_code=409, detail={"code": "POLICY_IMPORT_CONFLICT", "message": "导入过程中数据发生变化；整批没有导入，请重新预览。"}) from error
+    for draft in drafts:
+        db.refresh(draft)
+    return {"imported_count": len(drafts), "drafts": [_draft_response(draft).model_dump(mode="json") for draft in drafts]}
 
 
 @router.put("/policy-drafts/{draft_id}", response_model=PolicyDraftResponse)

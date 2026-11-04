@@ -214,6 +214,20 @@ class PolicyDraftUpdate(BaseModel):
         return self
 
 
+class PolicyDraftCreate(PolicyDraftUpdate):
+    policy_id: str = Field(min_length=2, max_length=80, pattern="^[A-Za-z0-9][A-Za-z0-9_-]+$")
+    version: str = Field(min_length=1, max_length=40, pattern="^\\S+$")
+    source: str = Field(min_length=1, max_length=1_048_576)
+
+    @field_validator("policy_id", "version", "title")
+    @classmethod
+    def strip_create_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("This field cannot be blank.")
+        return value
+
+
 class PolicyDraftResponse(BaseModel):
     id: str
     policy_id: str
@@ -228,6 +242,21 @@ class PolicyDraftResponse(BaseModel):
     exception_approval_allowed: bool
     status: str
     source: str
+
+
+class PolicyDraftSummary(BaseModel):
+    id: str
+    policy_id: str
+    version: str
+    title: str
+    action_type: PolicyActionType | None = None
+    policy_scope: PolicyScope = "general"
+    scope_product_id: str | None = None
+    customer_tier: str
+    max_discount_pct: Decimal | None
+    review_max_discount_pct: Decimal | None
+    exception_approval_allowed: bool
+    status: str
 
 
 class PolicyDiffRequest(BaseModel):

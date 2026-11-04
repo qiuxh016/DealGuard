@@ -1,18 +1,51 @@
 from decimal import Decimal
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from starlette.responses import Response
 
 from app.db.database import get_db
 from app.db.models import Customer, DemoActor, Product
 from app.services.actors import get_current_actor
 from app.services.permissions import require_capability
+from app.services.product_import import (
+    MAX_PRODUCT_IMPORT_BYTES,
+    ProductImportError,
+    parse_product_import,
+    product_import_template,
+    public_product_import_preview,
+)
 
 router = APIRouter(tags=["business data"])
+
+
+def _product_import_context(file: UploadFile, content: bytes, actor: DemoActor, db: Session):
+    try:
+        rows = parse_product_import(content, file.filename or "")
+    except ProductImportError as error:
+        raise HTTPException(status_code=error.status_code, detail={"code": "PRODUCT_IMPORT_FILE_INVALID", "message": str(error)}) from error
+    sku_values = sorted({row["sku"].upper() for row in rows if row["sku"]})
+    existing_skus: set[str] = set()
+    for start in range(0, len(sku_values), 500):
+        batch = sku_values[start:start + 500]
+        existing_skus.update(
+            sku.upper() for sku in db.scalars(
+                select(Product.sku).where(Product.tenant_id == actor.tenant_id, func.upper(Product.sku).in_(batch))
+            ).all()
+        )
+    preview = public_product_import_preview(rows, existing_skus)
+    return rows, preview
+
+
+async def _read_product_import_file(file: UploadFile) -> bytes:
+    content = await file.read(MAX_PRODUCT_IMPORT_BYTES + 1)
+    if len(content) > MAX_PRODUCT_IMPORT_BYTES:
+        raise HTTPException(status_code=413, detail={"code": "PRODUCT_IMPORT_TOO_LARGE", "message": "文件不能超过 5 MiB。"})
+    return content
 
 
 class CustomerCreate(BaseModel):
@@ -83,6 +116,16 @@ def create_customer(body: CustomerCreate, actor: DemoActor = Depends(get_current
     return {"id": row.id, "name": row.name, "tier": row.tier}
 
 
+@router.get("/products/import/template")
+def download_product_import_template(
+    format: str = Query(default="csv", pattern="^(csv|xlsx)$"),
+    actor: DemoActor = Depends(get_current_actor),
+):
+    require_capability(actor, "business_data.manage", code="BUSINESS_DATA_ADMIN_REQUIRED", message="Only workspace administrators can import products.")
+    content, media_type, filename = product_import_template(format)
+    return Response(content=content, media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
 @router.get("/products")
 def list_products(actor: DemoActor = Depends(get_current_actor), db: Session = Depends(get_db)):
     if actor.role == "manager":
@@ -91,6 +134,51 @@ def list_products(actor: DemoActor = Depends(get_current_actor), db: Session = D
         require_capability(actor, "business_data.read", code="BUSINESS_DATA_ROLE_REQUIRED", message="This role cannot view products.")
     rows = db.scalars(select(Product).where(Product.tenant_id == actor.tenant_id).order_by(Product.id)).all()
     return [{"id": row.sku, "sku": row.sku, "name": row.name, "currency": row.currency, "unit_price": row.unit_price, "stock": row.stock} for row in rows]
+
+
+@router.post("/products/import/preview")
+async def preview_product_import(
+    file: UploadFile = File(...),
+    actor: DemoActor = Depends(get_current_actor),
+    db: Session = Depends(get_db),
+):
+    require_capability(actor, "business_data.manage", code="BUSINESS_DATA_ADMIN_REQUIRED", message="Only workspace administrators can import products.")
+    content = await _read_product_import_file(file)
+    _, preview = _product_import_context(file, content, actor, db)
+    return {"filename": file.filename, **preview}
+
+
+@router.post("/products/import")
+async def import_products(
+    file: UploadFile = File(...),
+    actor: DemoActor = Depends(get_current_actor),
+    db: Session = Depends(get_db),
+):
+    require_capability(actor, "business_data.manage", code="BUSINESS_DATA_ADMIN_REQUIRED", message="Only workspace administrators can import products.")
+    content = await _read_product_import_file(file)
+    rows, preview = _product_import_context(file, content, actor, db)
+    if preview["total_rows"] == 0:
+        raise HTTPException(status_code=422, detail={"code": "PRODUCT_IMPORT_EMPTY", "message": "文件中没有可导入的商品行。"})
+    if preview["invalid_rows"]:
+        raise HTTPException(status_code=422, detail={
+            "code": "PRODUCT_IMPORT_VALIDATION_FAILED",
+            "message": "存在无效或重复商品行；没有导入任何商品。请修正文件后重新预览。",
+            "preview": {"filename": file.filename, **preview},
+        })
+    products = [row["product"] for row in rows]
+    db.add_all(Product(**product, tenant_id=actor.tenant_id) for product in products)
+    try:
+        db.commit()
+    except IntegrityError as error:
+        db.rollback()
+        raise HTTPException(status_code=409, detail={
+            "code": "PRODUCT_IMPORT_CONFLICT",
+            "message": "商品目录在预览后发生变化；没有导入任何商品，请重新预览。",
+        }) from error
+    return {"imported_count": len(products), "products": [
+        {"id": product["sku"], "sku": product["sku"], "name": product["name"], "currency": product["currency"], "unit_price": product["unit_price"], "stock": product["stock"]}
+        for product in products
+    ]}
 
 
 @router.post("/products", status_code=201)

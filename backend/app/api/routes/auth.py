@@ -111,6 +111,25 @@ class PasswordResetRequest(BaseModel):
     password: str = Field(min_length=12, max_length=1024)
 
 
+class ProfileUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    display_name: str = Field(min_length=2, max_length=120)
+
+    @field_validator("display_name")
+    @classmethod
+    def normalize_display_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Name cannot be blank.")
+        return value
+
+
+class PasswordChange(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    current_password: str = Field(min_length=1, max_length=1024)
+    new_password: str = Field(min_length=12, max_length=1024)
+
+
 def _set_session_cookie(response: Response, token: str) -> None:
     response.set_cookie(COOKIE_NAME, token, max_age=int(SESSION_TTL.total_seconds()), httponly=True,
                         secure=settings.app_env == "production", samesite="strict", path="/")
@@ -357,8 +376,45 @@ def accept_invitation(body: InvitationAccept, response: Response, db: Session = 
 
 
 @router.get("/me")
-def me(actor: DemoActor = Depends(get_session_actor)):
+def me(actor: DemoActor = Depends(get_session_actor), db: Session = Depends(get_db)):
+    account = db.get(AuthAccount, actor.id)
+    tenant = db.get(Tenant, actor.tenant_id)
+    return {
+        **actor_payload(actor),
+        "email": account.email if account else None,
+        "workspace_name": tenant.name if tenant else None,
+    }
+
+
+@router.patch("/me")
+def update_profile(body: ProfileUpdate, actor: DemoActor = Depends(get_session_actor), db: Session = Depends(get_db)):
+    actor.display_name = body.display_name
+    db.commit()
     return actor_payload(actor)
+
+
+@router.post("/change-password")
+def change_password(body: PasswordChange, response: Response,
+                    actor: DemoActor = Depends(get_session_actor), db: Session = Depends(get_db)):
+    account = db.get(AuthAccount, actor.id)
+    if account is None or not verify_password(body.current_password, account.password_hash):
+        raise HTTPException(status_code=400, detail={"code": "CURRENT_PASSWORD_INVALID", "message": "当前密码不正确。"})
+    if verify_password(body.new_password, account.password_hash):
+        raise HTTPException(status_code=422, detail={"code": "PASSWORD_UNCHANGED", "message": "新密码不能与当前密码相同。"})
+
+    now = datetime.now(timezone.utc)
+    account.password_hash = hash_password(body.new_password)
+    db.execute(AuthSession.__table__.delete().where(AuthSession.actor_id == actor.id))
+    db.execute(update(PasswordResetToken).where(
+        PasswordResetToken.actor_id == actor.id,
+        PasswordResetToken.used_at.is_(None),
+        PasswordResetToken.revoked_at.is_(None),
+    ).values(revoked_at=now))
+    db.commit()
+
+    token, _ = issue_session(db, actor.id)
+    _set_session_cookie(response, token)
+    return {"status": "password_updated"}
 
 
 @router.post("/logout")

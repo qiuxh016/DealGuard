@@ -1,0 +1,3 @@
+policy_id,version,title,source,action_type,policy_scope,scope_product_id,customer_tier,max_discount_pct,review_max_discount_pct,exception_approval_allowed
+SHOW-IMPORT-VIP,v1,Imported VIP volume policy,"Verified VIP customers may receive a direct discount up to 4% for bulk orders of at least 100 units.",quote_discount,bulk_order,,VIP,4,,false
+SHOW-IMPORT-RETURNS,v1,Imported returns reference,"Standard products have a 12-month limited warranty. Return eligibility follows the signed sales terms.",reference_only,general,,Standard,,,false

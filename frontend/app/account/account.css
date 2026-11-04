@@ -1,0 +1,26 @@
+.dg-account-main { max-width: 1180px; }
+.dg-account-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.dg-account-panel, .dg-account-team { padding: 24px; }
+.dg-account-panel-head { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+.dg-account-panel-head h2 { margin: 0; color: #15233b; font-size: 18px; }
+.dg-account-panel-head p { margin: 4px 0 0; color: #718097; font-size: 12px; }
+.dg-account-form { display: grid; gap: 14px; }
+.dg-account-form label, .dg-account-invite label, .dg-account-linkbox label { display: grid; gap: 6px; color: #526179; font-size: 12px; font-weight: 650; }
+.dg-account-form input, .dg-account-invite input, .dg-account-invite select, .dg-account-linkbox input { width: 100%; min-height: 42px; border: 1px solid #dce4ef; border-radius: 8px; background: #fff; padding: 9px 11px; color: #15233b; outline: none; }
+.dg-account-form input:focus, .dg-account-invite input:focus, .dg-account-invite select:focus, .dg-account-linkbox input:focus { border-color: #3659d9; box-shadow: 0 0 0 3px rgb(54 89 217 / 12%); }
+.dg-account-form input[readonly], .dg-account-linkbox input[readonly] { background: #f4f6fa; color: #65738b; }
+.dg-account-form > small { margin-top: -10px; color: #8390a2; font-size: 11px; }
+.dg-account-facts { display: grid; grid-template-columns: 90px 1fr; gap: 10px; padding: 12px; border-radius: 9px; background: #f7f8fb; font-size: 12px; }
+.dg-account-facts span { color: #718097; }.dg-account-facts strong { color: #263650; }
+.dg-account-security-note { margin: -4px 0 0; color: #718097; font-size: 11px; }
+.dg-account-team { margin-top: 16px; }
+.dg-account-invite { display: grid; grid-template-columns: minmax(180px, 1.5fr) minmax(130px, .8fr) minmax(160px, 1fr) auto; align-items: end; gap: 12px; padding: 16px; border: 1px solid #e3e8f0; border-radius: 11px; background: #fafbfc; }
+.dg-account-member-list { margin-top: 16px; border-top: 1px solid #e5eaf1; }
+.dg-account-member { display: grid; grid-template-columns: minmax(180px, 1fr) 90px auto; align-items: center; gap: 14px; padding: 15px 4px; border-bottom: 1px solid #e9edf3; }
+.dg-account-member-info { display: grid; gap: 3px; min-width: 0; }.dg-account-member-info strong { color: #263650; font-size: 13px; }.dg-account-member-info span, .dg-account-member-info small { overflow: hidden; color: #718097; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.dg-account-status { width: fit-content; padding: 5px 8px; border-radius: 99px; background: #f1f2f4; color: #727d8d; font-size: 10px; font-weight: 700; }.dg-account-status.is-active { background: #e8f7f1; color: #15735f; }
+.dg-account-member-actions { display: flex; gap: 8px; }
+.dg-account-linkbox { display: flex; align-items: end; gap: 10px; margin-top: 13px; padding: 12px; border: 1px solid #dce6fb; border-radius: 9px; background: #f5f8ff; }.dg-account-linkbox label { flex: 1; }.dg-account-linkbox input { font-size: 11px; }
+.dg-account-invitations { margin-top: 22px; }.dg-account-invitations h3 { margin: 0 0 10px; color: #526179; font-size: 13px; }.dg-account-invitation { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 3px; border-top: 1px solid #e9edf3; }.dg-account-invitation > span { display: grid; gap: 3px; }.dg-account-invitation strong { color: #263650; font-size: 12px; }.dg-account-invitation small { color: #718097; font-size: 10px; }
+.dg-account-loading { padding: 24px; color: #718097; }
+@media (max-width: 760px) { .dg-account-grid { grid-template-columns: 1fr; }.dg-account-panel, .dg-account-team { padding: 18px; }.dg-account-invite { grid-template-columns: 1fr; }.dg-account-member { grid-template-columns: minmax(0, 1fr) auto; }.dg-account-member-info { grid-column: 1 / 2; }.dg-account-status { grid-column: 2 / 3; grid-row: 1; }.dg-account-member-actions { grid-column: 1 / -1; }.dg-account-linkbox { align-items: stretch; flex-direction: column; } }
