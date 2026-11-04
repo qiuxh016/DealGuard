@@ -200,6 +200,20 @@ def plan_read_tools(state: dict[str, Any]) -> dict[str, Any]:
             timestamp=datetime.now(timezone.utc), details={"planner_mode": "demo", "tool_calls": []},
         )
         return {"events": state.get("events", []) + [event.model_dump(mode="json")]}
+    if not needs_product_resolution:
+        event = TraceEvent(
+            step="action_planner", status="skipped",
+            message="The requested product ID is already present in trusted workspace data; deterministic loading is sufficient.",
+            timestamp=datetime.now(timezone.utc), details={
+                "planner_mode": "read_only_tools_not_needed",
+                "reason_code": "PRODUCT_ID_RESOLVED",
+                "tool_calls": [],
+                "tool_call_count": 0,
+                "product_resolved": True,
+                "write_tools_available": False,
+            },
+        )
+        return {"events": state.get("events", []) + [event.model_dump(mode="json")]}
 
     from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
     from langchain_openai import ChatOpenAI
@@ -310,9 +324,6 @@ def plan_read_tools(state: dict[str, Any]) -> dict[str, Any]:
         if len(unique_products) == 1:
             intent = intent.model_copy(update={"product_id": next(iter(unique_products))})
             product_resolved = True
-    elif needs_product_resolution and intent.product_id is not None:
-        product_resolved = True
-
     status = "failed" if planner_error else "bounded" if call_limit_reached else "partial" if tool_errors else "completed"
     event = TraceEvent(
         step="action_planner",

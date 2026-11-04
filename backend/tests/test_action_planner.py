@@ -171,7 +171,7 @@ def test_planner_stops_at_bounded_tool_call_count(client, monkeypatch):
         calls = []
 
     monkeypatch.setattr("langchain_openai.ChatOpenAI", RepeatingChat)
-    state = _planner_state(client, product_id="P-100")
+    state = _planner_state(client, product_id=None)
     try:
         result = plan_read_tools(state)
     finally:
@@ -181,6 +181,26 @@ def test_planner_stops_at_bounded_tool_call_count(client, monkeypatch):
     assert details["tool_call_count"] <= MAX_TOOL_CALLS
     assert len(RepeatingChat.calls) <= MAX_TOOL_ROUNDS
     assert result["events"][-1]["status"] == "bounded"
+
+
+def test_planner_skips_model_call_when_trusted_product_id_is_resolved(client, monkeypatch):
+    monkeypatch.setattr(settings, "llm_api_key", "test-key")
+    monkeypatch.setattr(settings, "llm_model", "test-model")
+
+    def unexpected_model_call(**_kwargs):
+        raise AssertionError("Planner should not call the model when the product ID is already trusted.")
+
+    monkeypatch.setattr("langchain_openai.ChatOpenAI", unexpected_model_call)
+    state = _planner_state(client, product_id="P-100")
+    try:
+        result = plan_read_tools(state)
+    finally:
+        state["session"].close()
+
+    details = result["events"][-1]["details"]
+    assert result["events"][-1]["status"] == "skipped"
+    assert details["reason_code"] == "PRODUCT_ID_RESOLVED"
+    assert details["tool_calls"] == []
 
 
 def test_fixed_workflow_baseline_can_disable_tool_planning(client, monkeypatch):
