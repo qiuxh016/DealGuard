@@ -37,3 +37,7 @@ Thumbs.db
 .DS_Store
 .next-live-qa/
 .next-verification/
+
+# Local planning and demo notes
+/计划.md
+/演示.md
